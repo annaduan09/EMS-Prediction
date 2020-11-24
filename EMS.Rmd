@@ -1,0 +1,121 @@
+---
+title: "Virginia Beach EMS"
+author: "Anna Duan, Bingchu Chen"
+date: "11/23/2020"
+output: html_document
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r load packages, message=FALSE, warning=FALSE, include=TRUE, results='hide'}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+options(scipen=10000000)
+library(tidyverse)
+library(sf)
+library(RSocrata)
+library(viridis)
+library(spatstat)
+library(raster)
+library(spdep)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(tidycensus)
+library(mapview)
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+paletteGray <- c("gray90", "gray70", "gray50", "gray30", "gray10")
+```
+
+```{r read data, cache=TRUE}
+#EMS
+EMS <- read.csv("https://raw.githubusercontent.com/urbanSpatial/VaBeachEMSData/main/VaBeach_EMS_with_coords_17_18.csv")
+
+#VB Base
+VB_Base <- st_read("https://opendata.arcgis.com/datasets/82ada480c5344220b2788154955ce5f0_2.geojson") %>%
+  st_transform('ESRI:102751') %>%
+  filter(OBJECTID != 22) %>%
+  st_union()
+
+#Fishnet
+fishnet <- 
+  st_make_grid(VB_Base, cellsize = 500) %>%
+  st_sf() %>%
+  mutate(uniqueID = rownames(.))
+
+#Census
+census_api_key("d9ebfd04caa0138647fbacd94c657cdecbf705e9", install = TRUE, overwrite = TRUE)
+ACS <-
+  get_acs(geography = "tract", variables = c("B25002_003E", "B25001_001E", "B19013_001E", "B01001A_001E", "B01003_001E", "B07013_002E", "B07013_003E", "B08012_001E", "B25104_001E"), year=2018, state=51, county=810, geometry=T) %>%
+  st_transform('ESRI:102751')
+
+ACS <-
+  rbind(
+    st_centroid(ACS)[VB_Base,] %>%
+      st_drop_geometry() %>%
+      left_join(ACS) %>%
+      st_sf() %>%
+      mutate(inVB = "YES"),
+    st_centroid(ACS)[VB_Base, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(ACS) %>%
+      st_sf() %>%
+      mutate(inVB = "NO")) %>%
+  filter(inVB == "YES") %>%
+  dplyr::select(-inVB)
+#long to wide form
+ACS <-
+  ACS %>%
+  dplyr::select(-moe) %>%
+  spread(variable, estimate) %>%
+  dplyr::select(-geometry) %>%
+  rename(vacantUnits = B25002_003,
+         totalUnits = B25001_001,
+         medHHInc = B19013_001,
+         white = B01001A_001,
+         population = B01003_001,
+         ownerOcc = B07013_002,
+         renterOcc = B07013_003,
+         timeToWork = B08012_001,
+         monthhousingcost = B25104_001) %>%
+  na.omit() %>%
+  mutate(GEOID = as.numeric(GEOID))
+
+
+#Virginia Beach Open Data
+popDensity <- st_read("https://opendata.arcgis.com/datasets/0a71815ec61f418784439426e826066b_1.geojson") %>%
+  st_transform('ESRI:102751') %>%
+  dplyr::select(GEOID10, PopDensity)
+
+age <- st_read("https://opendata.arcgis.com/datasets/0a71815ec61f418784439426e826066b_3.geojson") %>%
+  st_transform('ESRI:102751') %>%
+  dplyr::select(GEOID10, DP0020001) %>%
+  rename(GEOID = GEOID10,
+         avgAge = DP0020001) %>%
+  mutate(GEOID = as.numeric(GEOID))
+
+raceDiversity <- st_read("https://opendata.arcgis.com/datasets/0a71815ec61f418784439426e826066b_5.geojson") %>%
+  st_transform('ESRI:102751') %>%
+  mutate(pctWhite = DP0080003/DP0080001,
+         pctBlack = DP0080004/DP0080001,
+         pctNativeAm = DP0080005/DP0080001,
+         pctAsian = DP0080006/DP0080001,
+         pctOther = TotlPopOth/DP0080001) %>%
+  dplyr::select(pctWhite, pctBlack, pctNativeAm, pctAsian, pctOther, Div_Index)
+
+genderRatio <- st_read("https://opendata.arcgis.com/datasets/0a71815ec61f418784439426e826066b_4.geojson") %>%
+   st_transform('ESRI:102751') %>%
+  mutate(maleRatio = DP0010020/DP0010039) %>%
+  dplyr::select(maleRatio)
+
+
+  
+```
+
+
+

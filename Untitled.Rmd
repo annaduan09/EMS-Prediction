@@ -1,0 +1,45 @@
+---
+title: "Virginia Beach EMS"
+author: "Anna Duan, Bingchu Chen"
+date: "11/23/2020"
+output: html_document
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r load packages, message=FALSE, warning=FALSE, include=TRUE, results='hide'}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+options(scipen=10000000)
+library(tidyverse)
+library(sf)
+library(RSocrata)
+library(viridis)
+library(spatstat)
+library(raster)
+library(spdep)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(tidycensus)
+library(mapview)
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+paletteGray <- c("gray90", "gray70", "gray50", "gray30", "gray10")
+```
+
+```{r read data}
+#EMS
+EMS <- read.csv("https://raw.githubusercontent.com/urbanSpatial/VaBeachEMSData/main/VaBeach_EMS_with_coords_17_18.csv")
+#Shapefile
+#Census
+#Center for Disease Control
+#Virginia Beach Open Data
+```
+
+
+

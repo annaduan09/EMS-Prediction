@@ -1,0 +1,195 @@
+---
+title: "EMS Santa Monica"
+author: "Anna Duan, Bingchu Chen"
+date: "11/23/2020"
+author: "Anna Duan, Bingchu Chen"
+date: "11/23/2020"
+output: html_document
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r load packages, message=FALSE, warning=FALSE, include=TRUE, results='hide'}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+options(scipen=10000000)
+library(tidyverse)
+library(sf)
+library(RSocrata)
+library(viridis)
+library(spatstat)
+library(raster)
+library(spdep)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(tidycensus)
+library(mapview)
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+paletteGray <- c("gray90", "gray70", "gray50", "gray30", "gray10")
+```
+
+
+```{r read data, cache=TRUE}
+#EMS
+EMS <- read.socrata("https://data.smgov.net/Public-Safety/Fire-Calls-for-Service/5y3u-5db4?call_type_description=Emergency Medical Service (EMS)")
+
+emergencies <- EMS %>%
+  dplyr::filter(., grepl('2019', incident_date)) %>%
+  dplyr::select(-call_type_description, -census_block_2000_geoid, -census_tract_2000_geoid,) %>%
+  dplyr::filter(., grepl('Report', disposition),
+                grepl(',', map_point)) %>%
+  st_as_sf(coords = c("latitude", "longitude"), crs = 4326, agr = "constant") %>%
+   # st_transform('EPSG:2225')
+      st_transform(st_crs(fishnet))
+
+#SM Base
+SM_Base <- st_read("https://opendata.arcgis.com/datasets/1e31d55b1eab4845a08080da0012169d_0.geojson") %>%
+    st_transform('EPSG:2225')
+
+#Fishnet
+fishnet <- 
+  st_make_grid(SM_Base, cellsize = 500) %>%
+  st_sf() %>%
+  mutate(uniqueID = rownames(.))
+
+#Census
+census_api_key("d9ebfd04caa0138647fbacd94c657cdecbf705e9", install = TRUE, overwrite = TRUE)
+ACS <-
+  get_acs(geography = "tract", variables = c("B25002_003E", "B25001_001E", "B19013_001E", "B01001A_001E", "B01003_001E", "B07013_002E", "B07013_003E", "B08012_001E", "B25104_001E"), year=2018, state=06, county=037, geometry=T) %>%
+    st_transform(st_crs(fishnet))
+
+ACS <-
+  rbind(
+    st_centroid(ACS)[SM_Base,] %>%
+      st_drop_geometry() %>%
+      left_join(ACS) %>%
+      st_sf() %>%
+      mutate(inSM = "YES"),
+    st_centroid(ACS)[SM_Base, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(ACS) %>%
+      st_sf() %>%
+      mutate(inSM = "NO")) %>%
+  filter(inSM == "YES") %>%
+  dplyr::select(-inSM)
+#long to wide form
+ACS <-
+  ACS %>%
+  dplyr::select(-moe) %>%
+  spread(variable, estimate) %>%
+  dplyr::select(-geometry) %>%
+  rename(vacantUnits = B25002_003,
+         totalUnits = B25001_001,
+         medHHInc = B19013_001,
+         white = B01001A_001,
+         population = B01003_001,
+         ownerOcc = B07013_002,
+         renterOcc = B07013_003,
+         timeToWork = B08012_001,
+         monthhousingcost = B25104_001) %>%
+  na.omit() %>%
+  mutate(GEOID = as.numeric(GEOID))
+
+
+#Santa Monica Open Data
+#crime
+crime <- read.socrata("https://data.smgov.net/OData.svc/ia9m-wspt?Disposition='Arrest'") %>%
+ # filter(.,grepl(',', map_point)) %>%
+  #st_as_sf(coords = c("latitude", "longitude"), crs = 4326, agr = "constant") %>%
+ #   st_transform(st_crs(fishnet)) %>%
+    dplyr::select(Y = latitude, X = longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "Crime")
+
+violentCrime <- read.socrata("https://data.smgov.net/OData.svc/kn6p-4y74?UCR='0100' or UCR='0110' or UCR='0120' or UCR='0300' or UCR='0311' or UCR='0312' or UCR='0314' or UCR='0315' or UCR='0317' or UCR='0321' or UCR='0322' or UCR='0325'") %>%
+ #   filter(Latitude != 0.00000) %>%
+#  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
+  #  st_transform(st_crs(fishnet)) %>%
+  dplyr::select(Y = Latitude, X = Longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "Violent_Crime")
+
+
+
+#trash/dumping
+trash <- read.socrata("https://data.smgov.net/OData.svc/tsas-mvez?topic='Illegal Dumping'") %>%
+ # filter(.,grepl(',', Location)) %>%
+#  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
+ #   st_transform(st_crs(fishnet)) %>%
+  dplyr::select(Y = Latitude, X = Longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "Trash") 
+
+#school free lunch
+freeLunch <- st_read("https://opendata.arcgis.com/datasets/8704be6acfe64b31bad6286a5e5a3557_2.geojson") %>%
+  filter(FRPM_Pct >= 0.5) %>%
+  dplyr::select(Y = Lat, X = Long) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+      mutate(Legend = "Free_Lunch")
+
+freeLunch <-
+  rbind(
+    st_centroid(freeLunch)[SM_Base,] %>%
+      st_drop_geometry() %>%
+      left_join(freeLunch) %>%
+      st_sf() %>%
+      mutate(inSM = "YES"),
+    st_centroid(freeLunch)[SM_Base, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(freeLunch) %>%
+      st_sf() %>%
+      mutate(inSM = "NO")) %>%
+  filter(inSM == "YES") %>%
+  dplyr::select(-inSM) 
+  
+  
+
+#popDensity
+
+#mean age
+#race
+#gender ratio
+
+
+
+
+# ATTACH VARIABLES TO FISHNET
+vars_net <- 
+  rbind(violentCrime,trash) %>%
+  st_join(., fishnet, join=st_within) %>%
+  st_drop_geometry() %>%
+  group_by(uniqueID, Legend) %>%
+  summarize(count = n()) %>%
+    full_join(fishnet) %>%
+    spread(Legend, count, fill=0) %>%
+    st_sf() %>%
+    dplyr::select(-`<NA>`) %>%
+    na.omit() %>%
+    ungroup()
+
+vars_net <- vars_net %>%
+  st_join(., ACS)
+
+
+
+# MAKE VARS_NET MAPPABLE
+vars_net.long <- 
+  gather(vars_net, Variable, value, -geometry, -uniqueID)
+
+vars <- unique(vars_net.long$Variable)
+mapList <- list()
+```
