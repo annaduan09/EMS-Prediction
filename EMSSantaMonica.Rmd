@@ -2,8 +2,6 @@
 title: "EMS Santa Monica"
 author: "Anna Duan, Bingchu Chen"
 date: "11/23/2020"
-author: "Anna Duan, Bingchu Chen"
-date: "11/23/2020"
 output: html_document
 output:
   html_document:
