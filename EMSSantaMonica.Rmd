@@ -27,8 +27,9 @@ library(knitr)
 library(kableExtra)
 library(tidycensus)
 library(mapview)
+library(devtools)
 root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
-source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+source_url("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
 paletteGray <- c("gray90", "gray70", "gray50", "gray30", "gray10")
 
 # NEAREST NEIGHBOR FUNCTION
@@ -74,13 +75,17 @@ census_api_key("d9ebfd04caa0138647fbacd94c657cdecbf705e9", install = TRUE, overw
 #row 2: white, population, renter occ, owner occ, #no HS degree
 #row 3: male adults, female adults, poverty level, youth unemployed (18-34, veteran), youth unemployed (non veteran)
 #row 4-5: male 15-17, male 18-19, male 20, male 21, male 22-24, male 25-29, male 30-34
-#row 6-7: female 18-34
+#row 6-7: female 18-34, 
+###MEDIAN AGE TOTAL, male, female
+
+dd18_5 <- load_variables(year = 2018,dataset = "acs5", cache = TRUE)
+
 ACS <-
   get_acs(geography = "tract", variables = c("B25002_003E", "B25001_001E", "B19013_001E", "B01001A_001E", "B01003_001E", "B07013_002E", "B07013_003E", "B06009_002E", 
 "B05003_008E", "B05003_019E", "B06012_002", "B21005_006E", "B21005_011E", 
 "B01001_006E", "B01001_007E", "B01001_008E", "B01001_009E","B01001_010E", "B01001_011E", "B01001_012E",
-"B01001_031E", "B01001_032E", "B01001_033E", "B01001_034E", "B01001_035E", "B01001_036E"
-), year=2018, state=06, county=037, geometry=T) %>%
+"B01001_031E", "B01001_032E", "B01001_033E", "B01001_034E", "B01001_035E", "B01001_036E",
+"B01002_001E", "B01002_002E","B01002_003E"), year=2018, state=06, county=037, geometry=T) %>%
   st_transform(st_crs(fishnet))
 
 
@@ -130,7 +135,10 @@ ACS <-
          female21 = B01001_033,
          female2224 = B01001_034,
          female2529 = B01001_035,
-         female3034 = B01001_036)
+         female3034 = B01001_036,
+         median_age = B01002_001,
+         medianage_male = B01002_002,
+         medianage_female = B01002_003)
 ACS <- 
   ACS %>%
   mutate(pctVacant = ifelse(totalUnits > 0, vacantUnits / totalUnits, 0),
@@ -179,15 +187,47 @@ trash <- read.socrata("https://data.smgov.net/OData.svc/tsas-mvez?topic='Illegal
     mutate(Legend = "Trash") 
   
 
-#popDensity
+#popDensity-HEARD TO GET BECAUSE EACH TRACT HAS SIMILAR DENSITY
 
 #mean age
 #race
 #gender ratio
 
+#311 calls
+call311 <- read.socrata("https://data.smgov.net/resource/tsas-mvez.json")
+#https://www.smgov.net/santamonicaworks.aspx
+  
+streetlight <-  call311 %>% filter(topic=="Streetlights")%>%
+ #   filter(Latitude != 0.00000) %>%
+#  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
+  #  st_transform(st_crs(fishnet)) %>%
+  dplyr::select(Y = latitude, X = longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "streetlights")
+
+signandmarking <- call311 %>% filter(topic=="Street Signs & Markings")%>%
+   #   filter(Latitude != 0.00000) %>%
+#  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
+  #  st_transform(st_crs(fishnet)) %>%
+  dplyr::select(Y = latitude, X = longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "markings")
 
 
-
+socialservice <- call311 %>% filter(topic=="General Concerns/Social Service Request")%>%
+   #   filter(Latitude != 0.00000) %>%
+#  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
+  #  st_transform(st_crs(fishnet)) %>%
+  dplyr::select(Y = latitude, X = longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "servicerequest")
+	
 # ATTACH VARIABLES TO FISHNET
 vars_net <- 
   rbind(violentCrime,trash) %>%
