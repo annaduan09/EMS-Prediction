@@ -10,7 +10,7 @@ output:
     code_folding: hide
 ---
 
-```{r load packages, message=FALSE, warning=FALSE, include=TRUE, results='hide'}
+```{r load packages, message=FALSE, warning=FALSE, include=TRUE, results='hide', cache=TRUE}
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 options(scipen=10000000)
 library(tidyverse)
@@ -277,7 +277,7 @@ vars_net.long.nn <-
 mapList <- list()
 ```
 
-```{r map EMS incidents}
+```{r map EMS incidents, cache=TRUE}
 #EMS
 EMS <- read.socrata("https://data.smgov.net/Public-Safety/Fire-Calls-for-Service/5y3u-5db4?call_type_description=Emergency Medical Service (EMS)")
 
@@ -345,7 +345,7 @@ vars_net.long <-
    gather(vars_net_noname, Variable, value, -geometry)
 
 #select features to show in multiple map
-vars_net.long.select <-
+vars_net.long.select <-      #AD: this is from predictive policing, haven't changed code yet.
    gather(vars_net_noname, Variable, value, -geometry) %>%
   dplyr::filter(Variable == "Abandoned_Buildings.nn" | Variable == "Affordable_Rental_Housing.nn"| Variable == "medHHInc"| Variable == "Street_Lights_Out" | Variable == "pctRenterOcc" | Variable == "pctPoverty" | Variable == "pctVacant" | Variable == "Garbage_Open" | Variable == "Building_Violation")
 
