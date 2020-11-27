@@ -9,6 +9,9 @@ output:
     toc_float: true
     code_folding: hide
 ---
+#Motivatioin
+
+#Data and Methods
 
 ```{r load packages, message=FALSE, warning=FALSE, include=TRUE, results='hide', cache=TRUE}
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
@@ -227,10 +230,41 @@ socialservice <- call311 %>% filter(topic=="General Concerns/Social Service Requ
     st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
     st_transform(st_crs(fishnet)) %>%
     mutate(Legend = "servicerequest")
-	
+
+#ADD VARIBALE NEAR TO INDUSTRIAL SITES
+parcel <-  read.socrata("https://data.smgov.net/resource/sa4y-7yah.json")
+lu <- as.data.frame(unique(parcel$specificusetype))
+harmful_lu <- parcel%>%filter(specificusetype=="Petroleum and Gas"|generalusetype=="Industrial")%>%
+  dplyr::select(Y = center_lat, X = center_lon) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "harmfullanduse")
+
+#osm
+sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
+    st_transform(st_crs(fishnet))%>%
+    mutate(Legend = "sport") 
+
+###?1 #notsure how to use this
+youthwellbeing <- read.socrata("https://data.smgov.net/resource/jw43-pgcp.json") %>%
+# filter(.,grepl(',', Location)) %>%
+#  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
+ #   st_transform(st_crs(fishnet)) %>%
+  dplyr::select(Y = Latitude, X = Longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform(st_crs(fishnet)) %>%
+    mutate(Legend = "wellbeing") 
+
+
+
+health <- read.csv("E:/Upenn/CPLN508/final project/EMS-Prediction/healthIndicators.csv")
+acs_health <- dplyr::left_join(ACS, health, by=c("NAME" = "name"))
+
 # ATTACH VARIABLES TO FISHNET
 vars_net <- 
-  rbind(violentCrime,trash) %>%
+  rbind(violentCrime,trash, streetlight, signandmarking, socialservice, harmful_lu) %>%
   st_join(., fishnet, join=st_within) %>%
   st_drop_geometry() %>%
   group_by(uniqueID, Legend) %>%
@@ -243,7 +277,7 @@ vars_net <-
     ungroup()
 
 vars_net <- vars_net %>%
-  st_join(., ACS)
+  st_join(., acs_health)
 
 
 
@@ -267,19 +301,57 @@ vars_net <-
       trash.nn =
         nn_function(st_c(st_coid(vars_net)), st_c(trash),3),
       violentCrime.nn =
-        nn_function(st_c(st_coid(vars_net)), st_c(violentCrime),3))
+        nn_function(st_c(st_coid(vars_net)), st_c(violentCrime),3),
+      streetlightissue.nn =
+        nn_function(st_c(st_coid(vars_net)), st_c(streetlight),3),
+      signandmarking.nn = 
+        nn_function(st_c(st_coid(vars_net)), st_c(signandmarking),3),
+      socialservice.nn = 
+        nn_function(st_c(st_coid(vars_net)), st_c(socialservice),3),
+      harmfullu.nn = 
+        nn_function(st_c(st_coid(vars_net)), st_c(harmful_lu),1),
+      sport.nn = 
+        nn_function(st_c(st_coid(vars_net)), st_c(st_coid(sport)),1))
 
 vars_net.long.nn <- 
   dplyr::select(vars_net, ends_with(".nn")) %>%
     gather(Variable, value, -geometry)
 
- vars <- unique(vars_net.long.nn$Variable)
+vars <- unique(vars_net.long.nn$Variable)
 mapList <- list()
+
+#join to fishnet
+vars_net <- 
+  st_join(vars_net, fishnet, join=st_within)
+
+
+neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3c6b3b85c2463ae_0.geojson")%>%
+      st_transform(st_crs(fishnet))
+
 ```
+
+
+#Data exploratory
+##maps
+##plots
+##spatial or space/time process
+
 
 ```{r map EMS incidents, cache=TRUE}
 #EMS
 EMS <- read.socrata("https://data.smgov.net/Public-Safety/Fire-Calls-for-Service/5y3u-5db4?call_type_description=Emergency Medical Service (EMS)")
+
+EMS$incident_date <- as.POSIXct(EMS$incident_date)
+
+EMS_2020 <- subset(EMS,
+     incident_date >= as.POSIXct('2020-01-01') &
+     incident_date <= as.POSIXct('2020-11-27')
+     ) %>%
+  dplyr::select(Y = latitude, X = longitude) %>%
+    na.omit() %>%
+    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    st_transform('EPSG:2225') %>%
+      distinct()
 
 emergencies <- EMS %>%
   dplyr::filter(., grepl('201', incident_date)) %>% #filter for incidents since 2010
@@ -292,19 +364,22 @@ dplyr::select(Y = latitude, X = longitude) %>%
 
 #EMS Net
 EMS_net <- 
-  dplyr::select(emergencies) %>% 
+  dplyr::select(EMS_2020) %>% 
   mutate(countEMS = 1) %>% 
   aggregate(., fishnet, sum) %>%
   mutate(countEMS = replace_na(countEMS, 0),
          uniqueID = rownames(.),
          cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
 
-#Map 2019 emergencies
+final_net <-
+  left_join(EMS_net, st_drop_geometry(vars_net), by=c("uniqueID"="uniqueID.x")) 
+
+#Map 2020 emergencies
 ggplot() +
   geom_sf(data = EMS_net, aes(fill = countEMS, colour = countEMS)) +
   scale_fill_viridis(option = "A", name = "Incidents Per Cell") +
   scale_colour_viridis(option = "A", name = "Incidents Per Cell") +
-  labs(title = "Figure 2: Observed EMS Incidents Joined to Fishnet, 2019", subtitle = "Santa Monica, CA") +
+  labs(title = "Figure 2: Observed EMS Incidents Joined to Fishnet, 2020", subtitle = "Santa Monica, CA") +
   mapTheme()
 
 ggplot() +
@@ -315,19 +390,49 @@ ggplot() +
   mapTheme()
 ```
 
-```{r histogram of incidents}
-final_net <-
-  left_join(EMS_net, st_drop_geometry(vars_net), by="uniqueID") 
+```{r moran}
+##Prepare for moran's
+library(spdep)
+final_net.nb <- poly2nb(as_Spatial(final_net), queen=TRUE)
+final_net.weights <- nb2listw(final_net.nb, style="W", zero.policy=TRUE)
 
-final_net <- #spatial join arrests and risk factors
-  st_centroid(final_net) %>%
+final_net.localMorans <- 
+  cbind(
+    as.data.frame(localmoran(final_net$countEMS, final_net.weights)),
+    as.data.frame(final_net)) %>% 
+    st_sf() %>%
+      dplyr::select(EMS_Count = countEMS, 
+                    Local_Morans_I = Ii, 
+                    P_Value = `Pr(z > 0)`) %>%
+      mutate(Significant_Hotspots = ifelse(P_Value <= 0.0000001, 1, 0)) %>%
+      gather(Variable, Value, -geometry)
+
+##distance to hotspots## 
+final_net <-
+  final_net %>% 
+  mutate(EMS.isSig = 
+           ifelse(localmoran(final_net$countEMS, 
+                             final_net.weights)[,5] <= 0.0000001, 1, 0)) %>%
+  mutate(EMS.isSig.dist = 
+           nn_function(st_coordinates(st_centroid(final_net)),
+                       st_coordinates(st_centroid(
+                         filter(final_net, EMS.isSig == 1))), 1))
+```
+
+```{r time explotory}
+
+```
+
+```{r histogram of incidents}
+
+#final_net <- 
+#  st_centroid(final_net) %>%
  #   st_join(dplyr::select(neighborhoods, name)) %>%
  #   st_join(dplyr::select(policeDistricts, District)) %>%
-      st_drop_geometry() %>%
-      left_join(dplyr::select(final_net, geometry, uniqueID)) %>%
-      st_sf() %>%
-  na.omit()
-
+ #     st_drop_geometry() %>%
+ #     left_join(dplyr::select(final_net, geometry, uniqueID)) %>%
+ #     st_sf() %>%
+  #    na.omit()
 
 ggplot(data = final_net, aes(x=countEMS)) +
   geom_histogram() +
@@ -366,3 +471,16 @@ for(i in vars){
 do.call(grid.arrange,c(mapList, ncol = 3, top = "Figure 4: Risk Factors by Fishnet"))
 
 ```
+
+#modeling
+```{r modeling}
+
+```
+
+
+#cross-validation
+
+#?
+##f. Provide additional maps and data visualizations to show that your model is useful.
+##g. Talk about how your analysis meets the use case you set out to address.
+##h. What could you do to make the analysis better?
