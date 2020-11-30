@@ -91,6 +91,13 @@ ACS <-
 "B01002_001E", "B01002_002E","B01002_003E"), year=2018, state=06, county=037, geometry=T) %>%
   st_transform(st_crs(fishnet))
 
+ACSTracts <- 
+  ACS %>%
+  as.data.frame() %>%
+  distinct(GEOID, .keep_all = TRUE) %>%
+  dplyr::select(GEOID, geometry) %>% 
+  st_sf %>%
+  st_transform('EPSG:2225')
 
 ACS <-
   rbind(
@@ -152,6 +159,7 @@ ACS <-
          youthUnemploy = (youthUnempVet + youthUnempNonVet) / (male1819 + male20 + male21 + male2224 + male2529 + male3034 + female1819 + female20 + female21 + female2224 + female2529 + female3034),
          pctMaleYouth = ifelse(population > 0, (male1517 + male1819 + male20 + male21 + male2224 + male2529 + male3034) / population, 0)) %>%
   dplyr::select(-totalUnits,-vacantUnits,-white,-renterOcc,-ownerOcc, -noHsDegree, -maleAdult, -femaleAdult, -youthUnempVet, -youthUnempNonVet, -male1517, -male1819, -male20, -male21, -male2224, -male2529, -male3034, -female1819, -female20, -female21, -female2224, -female2529, -female3034, -poverty)
+
 
 
 #Santa Monica Open Data
@@ -247,15 +255,15 @@ sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") 
     mutate(Legend = "sport") 
 
 ###?1 #notsure how to use this
-youthwellbeing <- read.socrata("https://data.smgov.net/resource/jw43-pgcp.json") %>%
+#youthwellbeing <- read.socrata("https://data.smgov.net/resource/jw43-pgcp.json") %>%
 # filter(.,grepl(',', Location)) %>%
 #  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
  #   st_transform(st_crs(fishnet)) %>%
-  dplyr::select(Y = Latitude, X = Longitude) %>%
-    na.omit() %>%
-    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
-    st_transform(st_crs(fishnet)) %>%
-    mutate(Legend = "wellbeing") 
+ # dplyr::select(Y = Latitude, X = Longitude) %>%
+#    na.omit() %>%
+#    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+#    st_transform(st_crs(fishnet)) %>%
+ #   mutate(Legend = "wellbeing") 
 
 
 
@@ -339,40 +347,75 @@ neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3
 
 ```{r map EMS incidents, cache=TRUE}
 #EMS
-EMS <- read.socrata("https://data.smgov.net/Public-Safety/Fire-Calls-for-Service/5y3u-5db4?call_type_description=Emergency Medical Service (EMS)")
+EMS <- read.socrata("https://data.smgov.net/Public-Safety/Fire-Calls-for-Service/5y3u-5db4?call_type_description=Emergency Medical Service (EMS)")%>% 
+dplyr::select (-census_block_2010_geoid, -census_tract_2010_geoid, -census_block_2000_geoid, -census_tract_2000_geoid)
 
-EMS$incident_date <- as.POSIXct(EMS$incident_date)
+library(lubridate)
+EMS_int <- EMS %>% mutate (interval = difftime(cleared,received,units = "min"))
 
-EMS_2020 <- subset(EMS,
+
+EMS_int$incident_date <- as.POSIXct(EMS_int$incident_date)
+
+EMS_2020 <- subset(EMS_int,
      incident_date >= as.POSIXct('2020-01-01') &
      incident_date <= as.POSIXct('2020-11-27')
-     ) %>%
-  dplyr::select(Y = latitude, X = longitude) %>%
-    na.omit() %>%
-    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
-    st_transform('EPSG:2225') %>%
-      distinct()
+     ) 
 
-emergencies <- EMS %>%
-  dplyr::filter(., grepl('201', incident_date)) %>% #filter for incidents since 2010
+library(dplyr)
+EMS2020.sf <- na.omit(EMS_2020, cols=c("longitude", "latitude")) %>%  
+    st_as_sf(coords = c("longitude", "latitude"), crs = 4326, agr = "constant") %>%
+    st_transform('EPSG:2225')
+
+
+emergencies <- EMS_int %>%
+  dplyr::filter(., grepl('201', incident_date))  #filter for incidents since 2010
 #  dplyr::filter(., grepl('Report', disposition)) %>%
-dplyr::select(Y = latitude, X = longitude) %>%
-    na.omit() %>%
-    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
-    st_transform('EPSG:2225') %>%
-      distinct()
+emergencies.sf <- na.omit(emergencies, cols=c("longitude", "latitude")) %>%  
+    st_as_sf(coords = c("longitude", "latitude"), crs = 4326, agr = "constant") %>%
+    st_transform('EPSG:2225')
+
 
 #EMS Net
-EMS_net <- 
-  dplyr::select(EMS_2020) %>% 
+EMS_net.count <- 
+  dplyr::select(EMS2020.sf) %>% 
   mutate(countEMS = 1) %>% 
   aggregate(., fishnet, sum) %>%
   mutate(countEMS = replace_na(countEMS, 0),
          uniqueID = rownames(.),
          cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
 
+EMS_net.resp <- 
+  dplyr::select(EMS2020.sf) %>% 
+  mutate(resp = na.omit(EMS2020.sf$interval)) %>% 
+  aggregate(., fishnet, mean) %>%
+  mutate(resp = replace_na(resp, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
+
+EMS_net <- full_join(EMS_net.count, st_drop_geometry(EMS_net.resp), by = c("uniqueID", "cvID"))
+
 final_net <-
   left_join(EMS_net, st_drop_geometry(vars_net), by=c("uniqueID"="uniqueID.x")) 
+
+#EMS SINCE 2010
+EMS_net.count.emg <- 
+  dplyr::select(emergencies.sf) %>% 
+  mutate(countEMS = 1) %>% 
+  aggregate(., fishnet, sum) %>%
+  mutate(countEMS = replace_na(countEMS, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
+
+EMS_net.resp.emg <- 
+  dplyr::select(emergencies.sf) %>% 
+  mutate(resp = na.omit(emergencies.sf$interval)) %>% 
+  aggregate(., fishnet, mean) %>%
+  mutate(resp = replace_na(resp, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
+
+EMS_net.emg <- full_join(EMS_net.count.emg, st_drop_geometry(EMS_net.resp.emg), by = c("uniqueID", "cvID"))
+
 
 #Map 2020 emergencies
 ggplot() +
@@ -384,10 +427,29 @@ ggplot() +
 
 ggplot() +
   geom_sf(data = SM_Base, fill = "black") +
-  geom_sf(data = emergencies, colour = "red", size = 0.1) +
+  geom_sf(data = emergencies.sf, colour = "red", size = 0.1) +
   scale_colour_viridis(name = "1 Observed EMS", labels = "", option = "B") +
   labs(title = "Figure 1: Observed EMS, 2010-2019", subtitle = "Santa Monica, CA") +
   mapTheme()
+
+#Map response time 2020
+  ggplot() +
+  geom_sf(data = EMS_net, aes(fill = resp, colour = resp)) +
+  scale_fill_viridis(option = "A", name = "Incidents Per Cell") +
+  scale_colour_viridis(option = "A", name = "Incidents Per Cell") +
+  labs(title = "Figure 2: Observed EMS Response Time (minutes) Joined to Fishnet, 2020", subtitle = "Santa Monica, CA") +
+  mapTheme()
+
+#Map response time since 2010
+  ggplot() +
+  geom_sf(data = EMS_net.emg, aes(fill = resp, colour = resp)) +
+  scale_fill_viridis(option = "A", name = "Incidents Per Cell") +
+  scale_colour_viridis(option = "A", name = "Incidents Per Cell") +
+  labs(title = "Figure 2: Observed EMS Response Time (minutes) Joined to Fishnet, 2010-2020", subtitle = "Santa Monica, CA") +
+  mapTheme()  
+
+  
+#???not sure why we have few data
 ```
 
 ```{r moran}
@@ -420,7 +482,12 @@ final_net <-
 ```
 
 ```{r time explotory}
-
+EMS_2020 %>% #edit
+  mutate(interval60 = floor_date(ymd_hms(start_time), unit = "hour"),
+         interval15 = floor_date(ymd_hms(start_time), unit = "15 mins"),
+         week = week(interval60),
+         dotw = wday(interval60, label=TRUE)) %>%
+  filter(week >=44, week <= 48)
 ```
 
 ```{r histogram of incidents}
