@@ -273,24 +273,29 @@ harmful_lu <- parcel%>%filter(specificusetype=="Petroleum and Gas"|generalusetyp
     mutate(Legend = "harmfullanduse")
 
 #osm
-sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
+#sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
+  sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
     st_transform(st_crs(fishnet))%>%
     mutate(Legend = "sport") 
 
 ###?1 #notsure how to use this
+
 #youthwellbeing <- read.socrata("https://data.smgov.net/resource/jw43-pgcp.json") %>%
 # filter(.,grepl(',', Location)) %>%
 #  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
  #   st_transform(st_crs(fishnet)) %>%
  # dplyr::select(Y = Latitude, X = Longitude) %>%
-#    na.omit() %>%
-#    st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
-#    st_transform(st_crs(fishnet)) %>%
- #   mutate(Legend = "wellbeing") 
+
+  #  na.omit() %>%
+   # st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
+    #st_transform(st_crs(fishnet)) %>%
+    #mutate(Legend = "wellbeing") 
+
 
 
 
 health <- read.csv("E:/Upenn/CPLN508/final project/EMS-Prediction/healthIndicators.csv")
+health <- read.csv("/Users/annaduan/Documents/GitHub/EMS-Prediction/healthIndicators.csv") 
 acs_health <- dplyr::left_join(ACS, health, by=c("NAME" = "name"))
 
 # ATTACH VARIABLES TO FISHNET
@@ -355,7 +360,7 @@ mapList <- list()
 vars_net <- 
   st_join(vars_net, fishnet, join=st_within)
 
-
+#AD: not sure this is neighborhood- neighborhood association is different
 neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3c6b3b85c2463ae_0.geojson")%>%
       st_transform(st_crs(fishnet))
 
@@ -443,8 +448,9 @@ EMS_net.emg <- full_join(EMS_net.count.emg, st_drop_geometry(EMS_net.resp.emg), 
 #Map 2020 emergencies
 ggplot() +
   geom_sf(data = EMS_net, aes(fill = countEMS, colour = countEMS)) +
-  scale_fill_viridis(option = "A", name = "Incidents Per Cell") +
-  scale_colour_viridis(option = "A", name = "Incidents Per Cell") +
+#  geom_sf(data = ACS, fill = "transparent", colour = "white") +
+  scale_fill_viridis(option = "D", name = "Incidents Per Cell") +
+  scale_colour_viridis(option = "D", name = "Incidents Per Cell") +
   labs(title = "Figure 2: Observed EMS Incidents Joined to Fishnet, 2020", subtitle = "Santa Monica, CA") +
   mapTheme()
 
@@ -454,6 +460,7 @@ ggplot() +
   scale_colour_viridis(name = "1 Observed EMS", labels = "", option = "B") +
   labs(title = "Figure 1: Observed EMS, 2010-2019", subtitle = "Santa Monica, CA") +
   mapTheme()
+
 
 #Map response time 2020
   ggplot() +
@@ -473,6 +480,19 @@ ggplot() +
 
   
 #???not sure why we have few data
+
+ggplot() + 
+  #geom_sf(data = ACS, fill = "black") +
+  stat_density2d(data = data.frame(st_coordinates(emergencies)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 15, geom = 'polygon') +
+  scale_fill_gradient(low = "#25CB10", high = "#FA7800", 
+                      breaks=c(0.000000003,0.00000003),
+                      labels=c("Minimum","Maximum"), name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "Density of EMS Incidents, Santa Monica") +
+  mapTheme()
+
 ```
 
 ```{r moran}
