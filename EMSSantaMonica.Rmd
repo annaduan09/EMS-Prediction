@@ -99,6 +99,10 @@ ACSTracts <-
   st_sf %>%
   st_transform('EPSG:2225')
 
+###need to subset here
+ACSTracts <- 
+#####
+  
 ACS <-
   rbind(
     st_centroid(ACS)[SM_Base,] %>%
@@ -196,6 +200,21 @@ trash <- read.socrata("https://data.smgov.net/OData.svc/tsas-mvez?topic='Illegal
     st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
     st_transform(st_crs(fishnet)) %>%
     mutate(Legend = "Trash") 
+
+#weather
+library(riem)
+weather.Panel <- 
+  riem_measures(station = "KSMO", date_start = "2020-01-01", date_end = "2020-11-27") %>%
+  dplyr::select(valid, tmpf, p01i, sknt)%>%
+  replace(is.na(.), 0) %>%
+    mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
+    mutate(week = week(interval60),
+           dotw = wday(interval60, label=TRUE)) %>%
+    group_by(interval60) %>%
+    summarize(Temperature = max(tmpf),
+              Precipitation = sum(p01i),
+              Wind_Speed = max(sknt)) %>%
+    mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
   
 
 #popDensity-HEARD TO GET BECAUSE EACH TRACT HAS SIMILAR DENSITY
@@ -203,6 +222,10 @@ trash <- read.socrata("https://data.smgov.net/OData.svc/tsas-mvez?topic='Illegal
 #mean age
 #race
 #gender ratio
+
+#distance to water
+
+#distance to downtown
 
 #311 calls
 call311 <- read.socrata("https://data.smgov.net/resource/tsas-mvez.json")
@@ -482,12 +505,84 @@ final_net <-
 ```
 
 ```{r time explotory}
-EMS_2020 %>% #edit
-  mutate(interval60 = floor_date(ymd_hms(start_time), unit = "hour"),
-         interval15 = floor_date(ymd_hms(start_time), unit = "15 mins"),
+EMS_2020 <- EMS_2020 %>%
+  mutate(interval60 = floor_date(ymd_hms(received), unit = "hour"),
+         interval15 = floor_date(ymd_hms(received), unit = "15 mins"),
          week = week(interval60),
-         dotw = wday(interval60, label=TRUE)) %>%
-  filter(week >=44, week <= 48)
+         dotw = wday(interval60, label=TRUE)) 
+
+#add census tracts
+dat_census <- st_join(EMS_2020 %>% 
+          filter(is.na(longitude) == FALSE &
+                   is.na(latitude) == FALSE) %>%
+          st_as_sf(., coords = c("longitude", "latitude"), crs = 4326),
+        ACSTracts %>%
+          st_transform(crs=4326),
+        join=st_intersects,
+              left = TRUE) %>%
+  mutate(longitude = unlist(map(geometry, 1)),
+         latitude = unlist(map(geometry, 2)))%>%
+  as.data.frame() %>%
+
+library(dplyr) 
+dat_net <- st_join(EMS_2020 %>% 
+          filter(is.na(longitude) == FALSE &
+                   is.na(latitude) == FALSE) %>%
+          st_as_sf(., coords = c("longitude", "latitude"), crs = 4326),
+        fishnet %>%
+          st_transform(crs=4326),
+        join=st_intersects,
+              left = TRUE) %>%
+  mutate(longitude = unlist(map(geometry, 1)),
+         latitude = unlist(map(geometry, 2)))%>%
+  as.data.frame() 
+
+#STUDY.PANEL
+study.panel <- 
+  expand.grid(interval60=unique(dat_net$interval60), 
+              uniqueID = unique(dat_net$uniqueID)) %>%
+  left_join(., dat_net %>%
+              dplyr::select(uniqueID, longitude, latitude)%>% 
+              distinct() %>%
+              group_by(uniqueID) %>%
+              slice(1))
+
+
+study.panel <- 
+  dat_net %>%
+  mutate(EMS_Counter = 1) %>%
+  right_join(study.panel) %>% 
+  group_by(interval60, uniqueID, longitude, latitude) %>% 
+  summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
+  left_join(weather.Panel) %>%
+  ungroup() %>%
+  filter(is.na(uniqueID) == FALSE) %>%
+  mutate(week = week(interval60),
+         dotw = wday(interval60, label = TRUE))
+
+study.panel <- 
+  study.panel %>% 
+  arrange(uniqueID, interval60) %>% 
+  mutate(lagHour = dplyr::lag(EMS_Count,1),
+         lag2Hours = dplyr::lag(EMS_Count,2),
+         lag3Hours = dplyr::lag(EMS_Count,3),
+         lag4Hours = dplyr::lag(EMS_Count,4),
+         lag12Hours = dplyr::lag(EMS_Count,12),
+         lag1day = dplyr::lag(EMS_Count,24)) %>% 
+   mutate(day = yday(interval60))
+
+as.data.frame(study.panel) %>%
+    group_by(interval60) %>% 
+    summarise_at(vars(starts_with("lag"), "EMS_Count"), mean, na.rm = TRUE) %>%
+    gather(Variable, Value, -interval60, -EMS_Count) %>%
+    mutate(Variable = factor(Variable, levels=c("lagHour","lag2Hours","lag3Hours","lag4Hours",
+                                                "lag12Hours","lag1day")))%>%
+    group_by(Variable) %>%  
+    summarize(correlation = round(cor(Value, EMS_Count),2)) %>%
+    kable (caption="Table 1: Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
+    kable_styling()
+
+#oh no
 ```
 
 ```{r histogram of incidents}
