@@ -31,6 +31,8 @@ library(kableExtra)
 library(tidycensus)
 library(mapview)
 library(devtools)
+library(lubridate)
+library(dplyr)
 root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
 source_url("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
 paletteGray <- c("gray90", "gray70", "gray50", "gray30", "gray10")
@@ -223,8 +225,6 @@ weather.Panel <-
 #race
 #gender ratio
 
-#distance to water
-
 #distance to downtown
 
 #311 calls
@@ -278,23 +278,9 @@ harmful_lu <- parcel%>%filter(specificusetype=="Petroleum and Gas"|generalusetyp
     st_transform(st_crs(fishnet))%>%
     mutate(Legend = "sport") 
 
-###?1 #notsure how to use this
-
-#youthwellbeing <- read.socrata("https://data.smgov.net/resource/jw43-pgcp.json") %>%
-# filter(.,grepl(',', Location)) %>%
-#  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
- #   st_transform(st_crs(fishnet)) %>%
- # dplyr::select(Y = Latitude, X = Longitude) %>%
-
-  #  na.omit() %>%
-   # st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
-    #st_transform(st_crs(fishnet)) %>%
-    #mutate(Legend = "wellbeing") 
 
 
-
-
-health <- read.csv("E:/Upenn/CPLN508/final project/EMS-Prediction/healthIndicators.csv")
+#health <- read.csv("E:/Upenn/CPLN508/final project/EMS-Prediction/healthIndicators.csv")
 health <- read.csv("/Users/annaduan/Documents/GitHub/EMS-Prediction/healthIndicators.csv") 
 acs_health <- dplyr::left_join(ACS, health, by=c("NAME" = "name"))
 
@@ -378,7 +364,6 @@ neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3
 EMS <- read.socrata("https://data.smgov.net/Public-Safety/Fire-Calls-for-Service/5y3u-5db4?call_type_description=Emergency Medical Service (EMS)")%>% 
 dplyr::select (-census_block_2010_geoid, -census_tract_2010_geoid, -census_block_2000_geoid, -census_tract_2000_geoid)
 
-library(lubridate)
 EMS_int <- EMS %>% mutate (interval = difftime(cleared,received,units = "min"))
 
 
@@ -389,7 +374,6 @@ EMS_2020 <- subset(EMS_int,
      incident_date <= as.POSIXct('2020-11-27')
      ) 
 
-library(dplyr)
 EMS2020.sf <- na.omit(EMS_2020, cols=c("longitude", "latitude")) %>%  
     st_as_sf(coords = c("longitude", "latitude"), crs = 4326, agr = "constant") %>%
     st_transform('EPSG:2225')
@@ -498,7 +482,7 @@ ggplot() +
 ```{r moran}
 ##Prepare for moran's
 library(spdep)
-final_net.nb <- poly2nb(as_Spatial(final_net), queen=TRUE)
+final_net.nb <- poly2nb(as_Spatial(final_net), queen=TRUE)  #AD: not working
 final_net.weights <- nb2listw(final_net.nb, style="W", zero.policy=TRUE)
 
 final_net.localMorans <- 
