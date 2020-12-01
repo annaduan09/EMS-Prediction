@@ -609,7 +609,7 @@ ggplot(data = final_net, aes(x=countEMS)) +
 ```{r map risk factors}
 #get rid of NAME variable (census tract name), select preferred features
 vars_net_noname <- subset(vars_net, select = -c(NAME)) %>%
-  dplyr::select(Trash, Violent_Crime, medHHInc, )
+  dplyr::select(harmfullanduse, markings, servicerequest, streetlights, Trash, Violent_Crime, median_age, population, medHHInc, pctVacant, pctWhite, pctRenterOcc, pctNoHS, pctPoverty, youthUnemploy, pctMaleYouth, diagnoseAsthma, notWorking, obese, diagnoseDiabetes, diagnoseHeartDisease, deoayedMedCare, uninsured, violentCrime.nn, trash.nn, streetlightissue.nn, signandmarking.nn, socialservice.nn, harmfullu.nn, sport.nn)
 
 #make vars_net.long to use for mapping
 vars_net.long <-
@@ -621,7 +621,7 @@ vars_net.long.select <-      #AD: this is from predictive policing, haven't chan
   dplyr::filter(Variable == "Abandoned_Buildings.nn" | Variable == "Affordable_Rental_Housing.nn"| Variable == "medHHInc"| Variable == "Street_Lights_Out" | Variable == "pctRenterOcc" | Variable == "pctPoverty" | Variable == "pctVacant" | Variable == "Garbage_Open" | Variable == "Building_Violation")
 
 #make list of unique variables
-vars <- unique(vars_net.long.select$Variable)
+vars <- unique(vars_net.long$Variable)
 mapList <- list()
 
 #map risk factors
@@ -640,6 +640,8 @@ do.call(grid.arrange,c(mapList, ncol = 3, top = "Figure 4: Risk Factors by Fishn
 
 #modeling
 ```{r modeling}
+
+
 
 ```
 
