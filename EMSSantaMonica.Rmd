@@ -618,10 +618,10 @@ vars_net.long <-
 #select features to show in multiple map
 vars_net.long.select <-      #AD: this is from predictive policing, haven't changed code yet.
    gather(vars_net_noname, Variable, value, -geometry) %>%
-  dplyr::filter(Variable == "Abandoned_Buildings.nn" | Variable == "Affordable_Rental_Housing.nn"| Variable == "medHHInc"| Variable == "Street_Lights_Out" | Variable == "pctRenterOcc" | Variable == "pctPoverty" | Variable == "pctVacant" | Variable == "Garbage_Open" | Variable == "Building_Violation")
+  dplyr::filter(Variable == "medHHInc" | Variable == "pctMaleYouth"| Variable == "pctNoHS"| Variable == "pctPoverty" | Variable == "markings" | Variable == "servicerequest" | Variable == "Trash" | Variable == "youthUnemploy" | Variable == "uninsured")
 
 #make list of unique variables
-vars <- unique(vars_net.long$Variable)
+vars <- unique(vars_net.long.select$Variable)
 mapList <- list()
 
 #map risk factors
@@ -638,15 +638,81 @@ do.call(grid.arrange,c(mapList, ncol = 3, top = "Figure 4: Risk Factors by Fishn
 
 ```
 
+```{r scatterplots}
+correlation.long <-
+  st_drop_geometry(final_net) %>%
+    dplyr::select(-uniqueID, -cvID, -NAME) %>%
+    gather(Variable, Value, -countEMS) %>%
+  mutate(Value = as.numeric(Value))
+
+correlation.cor <-
+  correlation.long %>%
+    group_by(Variable) %>%
+    summarize(correlation = cor(Value, countEMS, use = "complete.obs"))
+    
+ggplot(correlation.long, aes(Value, countEMS)) +
+  geom_point(size = 0.1) +
+  geom_text(data = correlation.cor, aes(label = paste("r =", round(correlation, 2))),
+            x=-Inf, y=Inf, vjust = 1.5, hjust = -.1) +
+  geom_smooth(method = "lm", se = FALSE, colour = "black") +
+  facet_wrap(~Variable, ncol = 3, scales = "free") +
+  labs(title = "Figure 6: Observed Arrests as a Function of Risk Factors", subtitle = "Chicago, IL") +
+  plotTheme()
+```
+
+
+
 #modeling
 ```{r modeling}
-
+reg.all <- c("markings", "medHHInc", "median_age", "medianage_female", "medianage_male", "notWorking", "obese", "pctMaleYouth", "pctNoHS", "pctPoverty", "pctRenterOcc", "pctVacant", "pctWhite", "population", "resp", "servicerequest", "signandmarking.nn", "sport.nn", "streetlightissue.nn", "Trash", "trash.nn", "Violent_Crime", "youthUnemploy", "deoayedMedCare", "diagnoseAsthma", "diagnoseDiabetes", "diagnoseHeartDisease", "harmfullanduse", "harmfullu.nn", "socialservice.nn", "streetlights", "uninsured", "violentCrime.nn")
 
 
 ```
 
 
 #cross-validation
+```{r CV}
+#crossValidate function
+crossValidate <- function(dataset, id, dependentVariable, indVariables) {
+
+allPredictions <- data.frame()
+cvID_list <- unique(dataset[[id]])
+
+for (i in cvID_list) {
+
+  thisFold <- i
+  cat("This hold out fold is", thisFold, "\n")
+
+  fold.train <- filter(dataset, dataset[[id]] != thisFold) %>% as.data.frame() %>% 
+                dplyr::select(id, geometry, indVariables, dependentVariable)
+  fold.test  <- filter(dataset, dataset[[id]] == thisFold) %>% as.data.frame() %>% 
+                dplyr::select(id, geometry, indVariables, dependentVariable)
+  
+  regression <-
+    glm(countEMS ~ ., family = "poisson", 
+      data = fold.train %>% 
+      dplyr::select(-geometry, -id))
+  
+  thisPrediction <- 
+    mutate(fold.test, Prediction = predict(regression, fold.test, type = "response"))
+    
+  allPredictions <-
+    rbind(allPredictions, thisPrediction)
+    
+  }
+  return(st_sf(allPredictions))
+}
+
+
+#all variables
+reg.cv <- crossValidate(
+  dataset = final_net,
+  id = "cvID",
+  dependentVariable = "countEMS",
+  indVariables = reg.all) %>%
+    dplyr::select(cvID = cvID, countEMS, Prediction, geometry)
+```
+
 
 #?
 ##f. Provide additional maps and data visualizations to show that your model is useful.
