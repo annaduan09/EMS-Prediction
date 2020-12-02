@@ -273,15 +273,15 @@ harmful_lu <- parcel%>%filter(specificusetype=="Petroleum and Gas"|generalusetyp
     mutate(Legend = "harmfullanduse")
 
 #osm
-#sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
-  sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
+sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
+#  sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
     st_transform(st_crs(fishnet))%>%
     mutate(Legend = "sport") 
 
 
 
-#health <- read.csv("E:/Upenn/CPLN508/final project/EMS-Prediction/healthIndicators.csv")
-health <- read.csv("/Users/annaduan/Documents/GitHub/EMS-Prediction/healthIndicators.csv") 
+health <- read.csv("E:/Upenn/CPLN508/final project/EMS-Prediction/healthIndicators.csv")
+#health <- read.csv("/Users/annaduan/Documents/GitHub/EMS-Prediction/healthIndicators.csv") 
 acs_health <- dplyr::left_join(ACS, health, by=c("NAME" = "name"))
 
 # ATTACH VARIABLES TO FISHNET
@@ -347,6 +347,7 @@ vars_net <-
   st_join(vars_net, fishnet, join=st_within)
 
 #AD: not sure this is neighborhood- neighborhood association is different
+#BC: sadly it's the only data we have got. I think these two may be very similar? http://www.city-data.com/nbmaps/neigh-Santa-Monica-California.html
 neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3c6b3b85c2463ae_0.geojson")%>%
       st_transform(st_crs(fishnet))
 
@@ -462,12 +463,10 @@ ggplot() +
   labs(title = "Figure 2: Observed EMS Response Time (minutes) Joined to Fishnet, 2010-2020", subtitle = "Santa Monica, CA") +
   mapTheme()  
 
-  
-#???not sure why we have few data
 
 ggplot() + 
   #geom_sf(data = ACS, fill = "black") +
-  stat_density2d(data = data.frame(st_coordinates(emergencies)), 
+  stat_density2d(data = data.frame(st_coordinates(emergencies.sf)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 15, geom = 'polygon') +
   scale_fill_gradient(low = "#25CB10", high = "#FA7800", 
@@ -482,7 +481,7 @@ ggplot() +
 ```{r moran}
 ##Prepare for moran's
 library(spdep)
-final_net.nb <- poly2nb(as_Spatial(final_net), queen=TRUE)  #AD: not working
+final_net.nb <- poly2nb(as_Spatial(final_net), queen=TRUE)  #AD: not working #?not sure why
 final_net.weights <- nb2listw(final_net.nb, style="W", zero.policy=TRUE)
 
 final_net.localMorans <- 
@@ -512,6 +511,8 @@ final_net <-
 EMS_2020 <- EMS_2020 %>%
   mutate(interval60 = floor_date(ymd_hms(received), unit = "hour"),
          interval15 = floor_date(ymd_hms(received), unit = "15 mins"),
+         interval5 = floor_date(ymd_hms(received), unit = "5 mins"),
+         interval1 = floor_date(ymd_hms(received), unit = "1 min"),
          week = week(interval60),
          dotw = wday(interval60, label=TRUE)) 
 
@@ -528,7 +529,7 @@ dat_census <- st_join(EMS_2020 %>%
          latitude = unlist(map(geometry, 2)))%>%
   as.data.frame() %>%
 
-library(dplyr) 
+library(dplyr)
 dat_net <- st_join(EMS_2020 %>% 
           filter(is.na(longitude) == FALSE &
                    is.na(latitude) == FALSE) %>%
@@ -544,6 +545,15 @@ dat_net <- st_join(EMS_2020 %>%
 #STUDY.PANEL
 study.panel <- 
   expand.grid(interval60=unique(dat_net$interval60), 
+              uniqueID = unique(dat_net$uniqueID)) %>%
+  left_join(., dat_net %>%
+              dplyr::select(uniqueID, longitude, latitude)%>% 
+              distinct() %>%
+              group_by(uniqueID) %>%
+              slice(1))
+
+study.panel.15 <- 
+  expand.grid(interval15=unique(dat_net$interval15), 
               uniqueID = unique(dat_net$uniqueID)) %>%
   left_join(., dat_net %>%
               dplyr::select(uniqueID, longitude, latitude)%>% 
@@ -580,7 +590,7 @@ as.data.frame(study.panel) %>%
     summarise_at(vars(starts_with("lag"), "EMS_Count"), mean, na.rm = TRUE) %>%
     gather(Variable, Value, -interval60, -EMS_Count) %>%
     mutate(Variable = factor(Variable, levels=c("lagHour","lag2Hours","lag3Hours","lag4Hours",
-                                                "lag12Hours","lag1day")))%>%
+                                                "lag12Hours","lag1day", "lay2day")))%>%
     group_by(Variable) %>%  
     summarize(correlation = round(cor(Value, EMS_Count),2)) %>%
     kable (caption="Table 1: Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
