@@ -393,7 +393,7 @@ EMS_net.resp <-
 EMS_net <- full_join(EMS_net.count, st_drop_geometry(EMS_net.resp), by = c("uniqueID"))
 
 final_net <-
-  inner_join(EMS_net, st_drop_geometry(vars_net_acs), by="uniqueID") 
+  inner_join(EMS_net, st_drop_geometry(vars_net_acs), by="uniqueID") #AD: something wrong here: it doesn't add the ACS columns...
 
 #EMS SINCE 2010
 EMS_net.count.emg <- 
