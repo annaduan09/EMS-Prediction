@@ -63,19 +63,13 @@ nn_function <- function(measureFrom,measureTo,k) {
 ```{r wrangle data, cache=TRUE}
 
 #SM Base
-SM_Base <- st_read("https://opendata.arcgis.com/datasets/1e31d55b1eab4845a08080da0012169d_0.geojson") %>%
+SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
+  st_union() %>%
     st_transform('EPSG:2225')
 
 #expanded SM base to capture additional fishnet cells
-SM_Buffer <- SM_Base %>%
-  st_buffer(.,6000)
-
-#Fishnet
-fishnet <- 
-  st_make_grid(SM_Base, cellsize = 500) %>%
-  st_sf() %>%
-  mutate(uniqueID = rownames(.))
-
+#SM_Buffer <- SM_Base %>%
+#  st_buffer(.,6000)
 
 #Census
 census_api_key("d9ebfd04caa0138647fbacd94c657cdecbf705e9", install = TRUE, overwrite = TRUE)
@@ -104,19 +98,15 @@ ACSTracts <-
   st_sf %>%
   st_transform('EPSG:2225')
 
-###need to subset here
-#AD: actually don't - I figured out why we have missing data and it's because some of the fishnet grids don't have correlating census data. I fixed it though :)
-ACSTracts <- 
-#####
   
 ACS <-
   rbind(
-    st_centroid(ACS)[SM_Buffer,] %>%
+    st_centroid(ACS)[SM_Base,] %>%
       st_drop_geometry() %>%
       left_join(ACS) %>%
       st_sf() %>%
       mutate(inSM = "YES"),
-    st_centroid(ACS)[SM_Buffer, op = st_disjoint] %>%
+    st_centroid(ACS)[SM_Base, op = st_disjoint] %>%
       st_drop_geometry() %>%
       left_join(ACS) %>%
       st_sf() %>%
@@ -170,18 +160,18 @@ ACS <-
          pctMaleYouth = ifelse(population > 0, (male1517 + male1819 + male20 + male21 + male2224 + male2529 + male3034) / population, 0)) %>%
   dplyr::select(-totalUnits,-vacantUnits,-white,-renterOcc,-ownerOcc, -noHsDegree, -maleAdult, -femaleAdult, -youthUnempVet, -youthUnempNonVet, -male1517, -male1819, -male20, -male21, -male2224, -male2529, -male3034, -female1819, -female20, -female21, -female2224, -female2529, -female3034, -poverty)
 
-tractBound <- ACS %>%
-  st_union()
+#Fishnet
+fishnet <- 
+  st_make_grid(ACS, cellsize = 500) %>%
+  st_sf()
 
 fishnet <- fishnet %>%
-  st_intersection(., tractBound)
+  mutate(uniqueID = as.numeric(rownames(.)))
+
 
 #Santa Monica Open Data
 #crime
 crime <- read.socrata("https://data.smgov.net/OData.svc/ia9m-wspt?Disposition='Arrest'") %>%
- # filter(.,grepl(',', map_point)) %>%
-  #st_as_sf(coords = c("latitude", "longitude"), crs = 4326, agr = "constant") %>%
- #   st_transform(st_crs(fishnet)) %>%
     dplyr::select(Y = latitude, X = longitude) %>%
     na.omit() %>%
     st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
@@ -189,9 +179,6 @@ crime <- read.socrata("https://data.smgov.net/OData.svc/ia9m-wspt?Disposition='A
     mutate(Legend = "Crime")
 
 violentCrime <- read.socrata("https://data.smgov.net/OData.svc/kn6p-4y74?UCR='0100' or UCR='0110' or UCR='0120' or UCR='0300' or UCR='0311' or UCR='0312' or UCR='0314' or UCR='0315' or UCR='0317' or UCR='0321' or UCR='0322' or UCR='0325'") %>%
- #   filter(Latitude != 0.00000) %>%
-#  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
-  #  st_transform(st_crs(fishnet)) %>%
   dplyr::select(Y = Latitude, X = Longitude) %>%
     na.omit() %>%
     st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
@@ -202,9 +189,6 @@ violentCrime <- read.socrata("https://data.smgov.net/OData.svc/kn6p-4y74?UCR='01
 
 #trash/dumping
 trash <- read.socrata("https://data.smgov.net/OData.svc/tsas-mvez?topic='Illegal Dumping'") %>%
- # filter(.,grepl(',', Location)) %>%
-#  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
- #   st_transform(st_crs(fishnet)) %>%
   dplyr::select(Y = Latitude, X = Longitude) %>%
     na.omit() %>%
     st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
@@ -225,13 +209,6 @@ weather.Panel <-
               Precipitation = sum(p01i),
               Wind_Speed = max(sknt)) %>%
     mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
-  
-
-#popDensity-HEARD TO GET BECAUSE EACH TRACT HAS SIMILAR DENSITY
-
-#mean age
-#race
-#gender ratio
 
 #distance to downtown
 
@@ -240,9 +217,6 @@ call311 <- read.socrata("https://data.smgov.net/resource/tsas-mvez.json")
 #https://www.smgov.net/santamonicaworks.aspx
   
 streetlight <-  call311 %>% filter(topic=="Streetlights")%>%
- #   filter(Latitude != 0.00000) %>%
-#  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
-  #  st_transform(st_crs(fishnet)) %>%
   dplyr::select(Y = latitude, X = longitude) %>%
     na.omit() %>%
     st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
@@ -250,9 +224,6 @@ streetlight <-  call311 %>% filter(topic=="Streetlights")%>%
     mutate(Legend = "streetlights")
 
 signandmarking <- call311 %>% filter(topic=="Street Signs & Markings")%>%
-   #   filter(Latitude != 0.00000) %>%
-#  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
-  #  st_transform(st_crs(fishnet)) %>%
   dplyr::select(Y = latitude, X = longitude) %>%
     na.omit() %>%
     st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
@@ -261,9 +232,6 @@ signandmarking <- call311 %>% filter(topic=="Street Signs & Markings")%>%
 
 
 socialservice <- call311 %>% filter(topic=="General Concerns/Social Service Request")%>%
-   #   filter(Latitude != 0.00000) %>%
-#  st_as_sf(coords = c("Latitude", "Longitude"), crs = 4326, agr = "constant") %>%
-  #  st_transform(st_crs(fishnet)) %>%
   dplyr::select(Y = latitude, X = longitude) %>%
     na.omit() %>%
     st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
@@ -281,15 +249,15 @@ harmful_lu <- parcel%>%filter(specificusetype=="Petroleum and Gas"|generalusetyp
     mutate(Legend = "harmfullanduse")
 
 #osm
-sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
-#  sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
+#sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
+  sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
     st_transform(st_crs(fishnet))%>%
     mutate(Legend = "sport") 
 
 
 
-health <- read.csv("E:/Upenn/CPLN508/final project/EMS-Prediction/healthIndicators.csv")
-#health <- read.csv("/Users/annaduan/Documents/GitHub/EMS-Prediction/healthIndicators.csv") 
+#health <- read.csv("E:/Upenn/CPLN508/final project/EMS-Prediction/healthIndicators.csv")
+health <- read.csv("/Users/annaduan/Documents/GitHub/EMS-Prediction/healthIndicators.csv") 
 acs_health <- dplyr::left_join(ACS, health, by=c("NAME" = "name"))
 
 # ATTACH VARIABLES TO FISHNET
@@ -306,21 +274,30 @@ vars_net <-
     na.omit() %>%
     ungroup()
 
-vars_net <-  
-  st_join(vars_net, acs_health)
+vars_net_centroid <-
+vars_net %>%
+  st_centroid()
+
+vars_net_acs <- vars_net_centroid %>% 
+  dplyr::select(uniqueID) %>%
+  st_join(., ACS) %>%
+  st_drop_geometry() %>%
+  left_join(vars_net,.,by="uniqueID") %>%
+  dplyr::select(NAME) %>%
+   na.omit() %>%
+    mutate(uniqueID = as.numeric(rownames(.)))
 
 
 ggplot() + #AD - used this to diagnose hte issue with the missing data/geometries
   geom_sf(data = ACS, colour = "red", fill = "transparent") +
   geom_sf(data = fishnet, colour = "blue", fill = "transparent") +
-  geom_sf(data = SM_Base, colour = "green", fill = "transparent") +
   mapTheme()
 
 
 
 # MAKE VARS_NET MAPPABLE
 vars_net.long <- 
-  gather(vars_net, Variable, value, -geometry, -uniqueID)
+  gather(vars_net_acs, Variable, value, -geometry, -uniqueID)
 
 vars <- unique(vars_net.long$Variable)
 mapList <- list()
@@ -330,8 +307,8 @@ mapList <- list()
 st_c <- st_coordinates
 st_coid <- st_centroid
 
-vars_net <-
-  vars_net %>%
+vars_net_acs <-
+  vars_net_acs %>%
     mutate(
       violentCrime.nn =
         nn_function(st_c(st_coid(vars_net)), st_c(violentCrime),3),
@@ -351,18 +328,16 @@ vars_net <-
         nn_function(st_c(st_coid(vars_net)), st_c(st_coid(sport)),1))
 
 vars_net.long.nn <- 
-  dplyr::select(vars_net, ends_with(".nn")) %>%
+  dplyr::select(vars_net_acs, ends_with(".nn")) %>%
     gather(Variable, value, -geometry)
 
 vars <- unique(vars_net.long.nn$Variable)
 mapList <- list()
 
-#join to fishnet
-vars_net <- 
-  st_join(vars_net, fishnet, join=st_within)
 
 #AD: not sure this is neighborhood- neighborhood association is different
 #BC: sadly it's the only data we have got. I think these two may be very similar? http://www.city-data.com/nbmaps/neigh-Santa-Monica-California.html
+#AD: fair enough! that makes sense
 neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3c6b3b85c2463ae_0.geojson")%>%
       st_transform(st_crs(fishnet))
 
@@ -404,7 +379,7 @@ EMS_net.count <-
   mutate(countEMS = 1) %>% 
   aggregate(., fishnet, sum) %>%
   mutate(countEMS = replace_na(countEMS, 0),
-         uniqueID = rownames(.),
+         uniqueID = as.numeric(rownames(.)),
          cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
 
 EMS_net.resp <- 
@@ -412,13 +387,13 @@ EMS_net.resp <-
   mutate(resp = na.omit(EMS2020.sf$interval)) %>% 
   aggregate(., fishnet, mean) %>%
   mutate(resp = replace_na(resp, 0),
-         uniqueID = rownames(.),
+         uniqueID = as.numeric(rownames(.)),
          cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
 
 EMS_net <- full_join(EMS_net.count, st_drop_geometry(EMS_net.resp), by = c("uniqueID"))
 
 final_net <-
-  left_join(EMS_net, st_drop_geometry(vars_net), by=c("uniqueID"="uniqueID.x")) 
+  inner_join(EMS_net, st_drop_geometry(vars_net_acs), by="uniqueID") 
 
 #EMS SINCE 2010
 EMS_net.count.emg <- 
@@ -468,21 +443,15 @@ ggplot() +
 #Map response time since 2010
   ggplot() +
   geom_sf(data = EMS_net.emg, aes(fill = resp, colour = resp)) +
-  scale_fill_viridis(option = "A", name = "Average time in minutes") +
+  scale_fill_viridis(option = "A", name = "Minutes") +
   scale_colour_viridis(option = "A", name = "Minutes") +
   labs(title = "Figure 2: EMS Response Time Joined to Fishnet, 2010-2020", subtitle = "Santa Monica, CA") +
   mapTheme()  
 
 
 ggplot() + 
-<<<<<<< HEAD
-  geom_sf(data = SM_Base, fill = "black") +
-=======
+
   #geom_sf(data = ACS, fill = "black") +
-<<<<<<< HEAD
->>>>>>> b374581df1c97eef07d910683e4aaf01cd9188a4
-=======
->>>>>>> b374581df1c97eef07d910683e4aaf01cd9188a4
   stat_density2d(data = data.frame(st_coordinates(emergencies.sf)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.1, bins = 200, geom = 'polygon') +
@@ -550,9 +519,10 @@ dat_census <- st_join(EMS_2020 %>%
               left = TRUE) %>%
   mutate(longitude = unlist(map(geometry, 1)),
          latitude = unlist(map(geometry, 2)))%>%
-  as.data.frame() %>%
+  as.data.frame() 
 
 library(dplyr)
+
 dat_net <- st_join(EMS_2020 %>% 
           filter(is.na(longitude) == FALSE &
                    is.na(latitude) == FALSE) %>%
@@ -641,21 +611,28 @@ ggplot(data = final_net, aes(x=countEMS)) +
 
 ```{r map risk factors}
 #get rid of NAME variable (census tract name), select preferred features
-vars_net_noname <- subset(vars_net, select = -c(NAME)) %>%
-  dplyr::select(harmfullanduse, markings, servicerequest, streetlights, Trash, Violent_Crime, median_age, population, medHHInc, pctVacant, pctWhite, pctRenterOcc, pctNoHS, pctPoverty, youthUnemploy, pctMaleYouth, diagnoseAsthma, notWorking, obese, diagnoseDiabetes, diagnoseHeartDisease, deoayedMedCare, uninsured, violentCrime.nn, trash.nn, streetlightissue.nn, signandmarking.nn, socialservice.nn, harmfullu.nn, sport.nn)
+vars_net_noname <- subset(vars_net_acs, select = -c(uniqueID.x)) %>%
+  dplyr::select(harmfullanduse, markings, servicerequest, streetlights, Trash, Violent_Crime, median_age, population, medHHInc, pctVacant, pctWhite, pctRenterOcc, pctNoHS, pctPoverty, youthUnemploy, pctMaleYouth, violentCrime.nn, trash.nn, streetlightissue.nn, signandmarking.nn, socialservice.nn, harmfullu.nn, sport.nn)
 
 #make vars_net.long to use for mapping
 vars_net.long <-
    gather(vars_net_noname, Variable, value, -geometry)
 
 #select features to show in multiple map
-vars_net.long.select <-      #AD: this is from predictive policing, haven't changed code yet.
+vars_net.long.select <-     
    gather(vars_net_noname, Variable, value, -geometry) %>%
-  dplyr::filter(Variable == "medHHInc" | Variable == "pctMaleYouth"| Variable == "pctNoHS"| Variable == "pctPoverty" | Variable == "markings" | Variable == "servicerequest" | Variable == "Trash" | Variable == "youthUnemploy" | Variable == "uninsured")
+  dplyr::filter(Variable == "medHHInc" | Variable == "pctMaleYouth"| Variable == "pctNoHS"| Variable == "pctPoverty" | Variable == "markings" | Variable == "servicerequest" | Variable == "Trash" | Variable == "youthUnemploy")
+
+vars_net.long.select2 <-     
+   gather(vars_net_noname, Variable, value, -geometry) %>%
+  dplyr::filter(Variable != "medHHInc" & Variable != "pctMaleYouth"& Variable != "pctNoHS"& Variable != "pctPoverty" & Variable != "markings" & Variable != "servicerequest" & Variable != "Trash" & Variable != "youthUnemploy")
 
 #make list of unique variables
 vars <- unique(vars_net.long.select$Variable)
 mapList <- list()
+
+vars2 <- unique(vars_net.long.select2$Variable)
+mapList2 <- list()
 
 #map risk factors
 for(i in vars){
@@ -667,7 +644,18 @@ for(i in vars){
       mapTheme() +
     theme(plot.title = element_text(size=10))}
 
+for(i in vars2){
+  mapList2[[i]] <- 
+    ggplot() +
+      geom_sf(data = filter(vars_net.long, Variable == i), aes(fill=value), colour=NA) +
+      scale_fill_viridis(option = "A", name="") +
+      labs(title=i) +
+      mapTheme() +
+    theme(plot.title = element_text(size=10))}
+
 do.call(grid.arrange,c(mapList, ncol = 3, top = "Figure 4: Risk Factors by Fishnet"))
+
+do.call(grid.arrange,c(mapList2, ncol = 3, top = "Figure 4: Risk Factors by Fishnet"))
 
 ```
 
@@ -740,7 +728,7 @@ for (i in cvID_list) {
 #all variables
 reg.cv <- crossValidate(
   dataset = final_net,
-  id = "cvID",
+  id = "cvID.x",
   dependentVariable = "countEMS",
   indVariables = reg.all) %>%
     dplyr::select(cvID = cvID, countEMS, Prediction, geometry)
