@@ -197,9 +197,11 @@ trash <- read.socrata("https://data.smgov.net/OData.svc/tsas-mvez?topic='Illegal
 
 #weather
 library(riem)
+library(dplyr)
+library(lubridate)
 weather.Panel <- 
   riem_measures(station = "KSMO", date_start = "2020-01-01", date_end = "2020-11-27") %>%
-  dplyr::select(valid, tmpf, p01i, sknt)%>%
+  dplyr::select(valid, tmpf, p01i, sknt) %>%
   replace(is.na(.), 0) %>%
     mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
     mutate(week = week(interval60),
@@ -506,6 +508,7 @@ EMS_2020 <- EMS_2020 %>%
          interval5 = floor_date(ymd_hms(received), unit = "5 mins"),
          interval1 = floor_date(ymd_hms(received), unit = "1 min"),
          week = week(interval60),
+         month = month(interval60),
          dotw = wday(interval60, label=TRUE)) 
 
 #add census tracts
@@ -589,6 +592,8 @@ as.data.frame(study.panel) %>%
     kable (caption="Table 1: Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
     kable_styling()
 
+
+
 #oh no
 ```
 
@@ -657,6 +662,39 @@ do.call(grid.arrange,c(mapList, ncol = 3, top = "Figure 4: Risk Factors by Fishn
 
 do.call(grid.arrange,c(mapList2, ncol = 3, top = "Figure 4: Risk Factors by Fishnet"))
 
+```
+
+```{r weather, fig.height=5, fig.width=10}
+library(ggplot2)
+library(gridExtra)
+grid.arrange(
+  ggplot(weather.Panel, aes(interval60,Precipitation)) + geom_line() + 
+  labs(title="Precipitation", x="Month", y="Precipitation") + plotTheme(),
+  ggplot(weather.Panel, aes(interval60,Wind_Speed)) + geom_line() + 
+    labs(title="Wind Speed", x="Month", y="Wind Speed") + plotTheme(),
+  ggplot(weather.Panel, aes(interval60,Temperature)) + geom_line() + 
+    labs(title="Temperature", x="Month", y="Temperature") + plotTheme(),
+  top="Weather Data - Santa Monica CA - Jan - Nov 2020")
+```
+
+
+```{r plot times}
+
+
+ggplot(EMS_2020 %>% mutate(hour = hour(interval60)))+
+     geom_freqpoly(aes(hour, color = dotw), binwidth = 1)+
+  labs(title="EMS Calls in Santa Monica, by day of week, 2010-2020",
+       x="Hour", 
+       y="EMS Calls")+
+     plotTheme()
+
+
+ggplot(EMS_2020 %>% mutate(hour = hour(interval60)))+
+     geom_freqpoly(aes(month), binwidth = 1)+
+  labs(title="EMS Calls in Santa Monica by month, 2020",
+       x="Month", 
+       y="EMS Calls")+
+     plotTheme()
 ```
 
 ```{r scatterplots}
