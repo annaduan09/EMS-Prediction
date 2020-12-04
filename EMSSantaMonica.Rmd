@@ -37,6 +37,46 @@ root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analyti
 source_url("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
 paletteGray <- c("gray90", "gray70", "gray50", "gray30", "gray10")
 
+
+plotTheme <- theme(
+  plot.title =element_text(size=12),
+  plot.subtitle = element_text(size=8),
+  plot.caption = element_text(size = 6),
+  axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+  axis.text.y = element_text(size = 10),
+  axis.title.y = element_text(size = 10),
+  # Set the entire chart region to blank
+  panel.background=element_blank(),
+  plot.background=element_blank(),
+  #panel.border=element_rect(colour="#F0F0F0"),
+  # Format the grid
+  panel.grid.major=element_line(colour="#D0D0D0",size=.2),
+  axis.ticks=element_blank())
+
+mapTheme <- theme(plot.title =element_text(size=12),
+                  plot.subtitle = element_text(size=8),
+                  plot.caption = element_text(size = 6),
+                  axis.line=element_blank(),
+                  axis.text.x=element_blank(),
+                  axis.text.y=element_blank(),
+                  axis.ticks=element_blank(),
+                  axis.title.x=element_blank(),
+                  axis.title.y=element_blank(),
+                  panel.background=element_blank(),
+                  panel.border=element_blank(),
+                  panel.grid.major=element_line(colour = 'transparent'),
+                  panel.grid.minor=element_blank(),
+                  legend.direction = "vertical", 
+                  legend.position = "right",
+                  plot.margin = margin(1, 1, 1, 1, 'cm'),
+                  legend.key.height = unit(1, "cm"), legend.key.width = unit(0.2, "cm"))
+
+
+palette5 <- c("#eff3ff","#bdd7e7","#6baed6","#3182bd","#08519c")
+palette4 <- c("#D2FBD4","#92BCAB","#527D82","#123F5A")
+palette2 <- c("#6baed6","#08519c")
+
+
 # NEAREST NEIGHBOR FUNCTION
 nn_function <- function(measureFrom,measureTo,k) {
   measureFrom_Matrix <-
@@ -98,7 +138,10 @@ ACSTracts <-
   st_sf %>%
   st_transform('EPSG:2225')
 
-  
+###need to subset here
+ACSTracts <- 
+#####
+
 ACS <-
   rbind(
     st_centroid(ACS)[SM_Base,] %>%
@@ -213,6 +256,8 @@ weather.Panel <-
     mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
 
 #distance to downtown
+
+#distance to water
 
 #311 calls
 call311 <- read.socrata("https://data.smgov.net/resource/tsas-mvez.json")
@@ -511,6 +556,23 @@ EMS_2020 <- EMS_2020 %>%
          month = month(interval60),
          dotw = wday(interval60, label=TRUE)) 
 
+
+EMS2020.sf <- EMS2020.sf %>%
+  mutate(interval60 = floor_date(ymd_hms(received), unit = "hour"),
+         interval15 = floor_date(ymd_hms(received), unit = "15 mins"),
+         week = week(interval60),
+         dotw = wday(interval60, label=TRUE)) 
+
+
+
+EMS_2010 <- emergencies %>%
+  mutate(interval60 = floor_date(ymd_hms(received), unit = "hour"),
+         interval15 = floor_date(ymd_hms(received), unit = "15 mins"),
+         interval5 = floor_date(ymd_hms(received), unit = "5 mins"),
+         interval1 = floor_date(ymd_hms(received), unit = "1 min"),
+         week = week(interval60),
+         dotw = wday(interval60, label=TRUE)) 
+
 #add census tracts
 dat_census <- st_join(EMS_2020 %>% 
           filter(is.na(longitude) == FALSE &
@@ -557,11 +619,44 @@ study.panel.15 <-
               group_by(uniqueID) %>%
               slice(1))
 
+install.packages("vctrs")
+
+study.panel.2010 <- 
+  expand.grid(interval60=unique(dat_net.2010$interval60),
+              uniqueID = unique(dat_net.2010$uniqueID)) %>%
+  left_join(., dat_net.2010 %>%
+              dplyr::select(uniqueID, longitude, latitude)%>% 
+              distinct() %>%
+              group_by(uniqueID) %>%
+              slice(1))
 
 study.panel <- 
   dat_net %>%
   mutate(EMS_Counter = 1) %>%
   right_join(study.panel) %>% 
+  group_by(interval60, uniqueID, longitude, latitude) %>% 
+  summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
+  left_join(weather.Panel) %>%
+  ungroup() %>%
+  filter(is.na(uniqueID) == FALSE) %>%
+  mutate(week = week(interval60),
+         dotw = wday(interval60, label = TRUE))
+
+study.panel.15 <- 
+  dat_net %>%
+  mutate(EMS_Counter = 1) %>%
+  right_join(study.panel.15) %>% 
+  group_by(interval15, uniqueID, longitude, latitude) %>% 
+  summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
+  ungroup() %>%
+  filter(is.na(uniqueID) == FALSE) %>%
+  mutate(week = week(interval15),
+         dotw = wday(interval15, label = TRUE))
+
+study.panel.2010 <- 
+  dat_net %>%
+  mutate(EMS_Counter = 1) %>%
+  right_join(study.panel.2010) %>% 
   group_by(interval60, uniqueID, longitude, latitude) %>% 
   summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
   left_join(weather.Panel) %>%
@@ -581,6 +676,28 @@ study.panel <-
          lag1day = dplyr::lag(EMS_Count,24)) %>% 
    mutate(day = yday(interval60))
 
+
+study.panel.15 <- 
+  study.panel.15 %>% 
+  arrange(uniqueID, interval15) %>% 
+  mutate(lag15 = dplyr::lag(EMS_Count,1),
+         lag30 = dplyr::lag(EMS_Count,2),
+         lag45 = dplyr::lag(EMS_Count,3),
+         lag60 = dplyr::lag(EMS_Count,4)) %>% 
+   mutate(day = yday(interval15))
+
+study.panel.2010 <- 
+  study.panel.2010 %>% 
+  arrange(uniqueID, interval60) %>% 
+  mutate(lagHour = dplyr::lag(EMS_Count,1),
+         lag2Hours = dplyr::lag(EMS_Count,2),
+         lag3Hours = dplyr::lag(EMS_Count,3),
+         lag4Hours = dplyr::lag(EMS_Count,4),
+         lag12Hours = dplyr::lag(EMS_Count,12),
+         lag1day = dplyr::lag(EMS_Count,24)) %>% 
+   mutate(day = yday(interval60))
+
+
 as.data.frame(study.panel) %>%
     group_by(interval60) %>% 
     summarise_at(vars(starts_with("lag"), "EMS_Count"), mean, na.rm = TRUE) %>%
@@ -593,8 +710,174 @@ as.data.frame(study.panel) %>%
     kable_styling()
 
 
+as.data.frame(study.panel.15) %>%
+    group_by(interval15) %>% 
+    summarise_at(vars(starts_with("lag"), "EMS_Count"), mean, na.rm = TRUE) %>%
+    gather(Variable, Value, -interval15, -EMS_Count) %>%
+    mutate(Variable = factor(Variable, levels=c("lag15","lag30","lag45","lag60")))%>%
+    group_by(Variable) %>%  
+    summarize(correlation = round(cor(Value, EMS_Count),2)) %>%
+    kable (caption="Table 2: Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
+    kable_styling()
 
-#oh no
+as.data.frame(study.panel.2010) %>%
+    group_by(interval60) %>% 
+    summarise_at(vars(starts_with("lag"), "EMS_Count"), mean, na.rm = TRUE) %>%
+    gather(Variable, Value, -interval60, -EMS_Count) %>%
+    mutate(Variable = factor(Variable, levels=c("lagHour","lag2Hours","lag3Hours","lag4Hours",
+                                                "lag12Hours","lag1day")))%>%
+    group_by(Variable) %>%  
+    summarize(correlation = round(cor(Value, EMS_Count),2)) %>%
+    kable (caption="Table 3: Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
+    kable_styling()
+```
+
+```{r time explotory rush hour}
+ggplot(EMS_2010 %>%
+         group_by(week) %>%
+         tally())+
+  geom_line(aes(x = week, y = n))+
+  labs(title="Figure 4.1: EMS trips, Santa Monica, 2010-2020 by week",
+       x="week of the year", 
+       y="Number of trips")+
+  plotTheme
+
+ggplot(EMS_2010 %>%
+         group_by(dotw) %>%
+         tally())+
+  geom_line(aes(x = dotw, y = n, group = 1))+
+  labs(title="Figure 4.2: EMS trips, Santa Monica, 2010-2020 by day of the week",
+       x="Day", 
+       y="Number of trips")+
+  plotTheme
+
+ggplot(EMS_2020 %>%
+         group_by(week) %>%
+         tally())+
+  geom_line(aes(x = week, y = n))+
+  labs(title="Figure 4.3: EMS trips, Santa Monica, 2020 by week",
+       x="week of the year", 
+       y="Number of trips")+
+  plotTheme
+
+ggplot(EMS_2020 %>%
+         group_by(dotw) %>%
+         tally())+
+  geom_line(aes(x = dotw, y = n, group = 1))+
+  labs(title="Figure 4.4: EMS trips, Santa Monica, 2020 by day of the week",
+       x="Day", 
+       y="Number of trips")+
+  plotTheme
+
+#on a RANDOM Wednesday
+EMS_2020_W1 <- subset(EMS_2020, week==20 & dotw=="Wed")
+ggplot(EMS_2020_W1 %>%
+         group_by(interval60) %>%
+         tally())+
+  geom_line(aes(x = interval60, y = n))+
+  labs(title="Figure 4.4: EMS trips, Santa Monica, 2020 by day of the week",
+       x="Day", 
+       y="Number of trips")+
+  plotTheme
+
+EMS_2020 %>% 
+         mutate(time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
+                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
+                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
+                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush"))%>%
+         group_by(interval60, reporting_district, time_of_day) %>%
+         tally()%>%
+  group_by(time_of_day, reporting_district,)%>%
+  summarize(mean_trips = mean(n))%>%
+  ggplot()+
+  geom_histogram(aes(mean_trips), binwidth = 1)+
+  labs(title="Figure 4.2: Mean Number of Hourly Trips Per reporting district. Philadelphia, Nov, 2018",
+       x="Number of trips", 
+       y="Frequency")+
+  facet_wrap(~time_of_day)+
+  plotTheme
+
+#hour of dotw
+ggplot(EMS_2020 %>% mutate(hour = hour(received)))+
+     geom_freqpoly(aes(hour, color = dotw), binwidth = 1)+
+  labs(title="Figure 4.3: EMS calls in Santa Monica, by day of the week, 2020",
+       x="Hour", 
+       y="Trip Counts")+
+     plotTheme
+
+
+ggplot(EMS_2020 %>% 
+         mutate(hour = hour(received),
+                weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday")))+
+     geom_freqpoly(aes(hour, color = weekend), binwidth = 1)+
+  labs(title="Figure 4.4: EMS calls in Santa Monica - weekend vs weekday, 2020",
+       x="Hour", 
+       y="Trip Counts")+
+     plotTheme
+
+#origin map
+ggplot()+
+  geom_sf(data = neighborhood %>%
+          st_transform(crs=4326), fill = "white")+
+  geom_point(data = dat_census %>% 
+            mutate(hour = hour(received),
+                weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
+                time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
+                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
+                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
+                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush"))%>%
+              group_by(reporting_district, latitude, longitude, weekend, time_of_day) %>%
+              tally(),
+            aes(x=longitude, y = latitude, color = n), 
+            fill = "transparent", alpha = 0.4, size = 1)+
+  scale_colour_viridis(direction = -1,
+  discrete = FALSE, option = "D")+
+  ylim(min(dat_census$latitude), max(dat_census$latitude))+
+  xlim(min(dat_census$longitude), max(dat_census$longitude))+
+  facet_grid(weekend ~ time_of_day)+
+  labs(title="Figure 4.5: EMS calls per hr by reporting district. Santa Monica, 2020")+
+  mapTheme
+
+
+```
+
+```{r animation}
+
+week20 <-
+  filter(EMS2020.sf, week == 20)
+
+week20.panel <-
+  expand.grid(
+    interval60 = unique(week20$interval60),
+    reporting_district = unique(EMS2020.sf$reporting_district))
+
+ems.animation.data <-
+  mutate(week20, Trip_Counter = 1) %>%
+    right_join(week20.panel) %>% 
+    group_by(interval60, reporting_district) %>%
+    summarize(Trip_Count = sum(Trip_Counter, na.rm=T)) %>% 
+    ungroup() %>% 
+    st_sf() %>%
+    mutate(Trips = case_when(Trip_Count == 0 ~ "0 trips",
+                             Trip_Count == 1 ~ "1 trips")) %>%
+    mutate(Trips = fct_relevel(Trips, "0 trips","1 trips"))
+
+
+library(gganimate)
+library(gifski)
+EMS_animation <-
+  ggplot() +
+    geom_sf(data = ems.animation.data, aes(col = Trips), size= 5, show.legend = "point")+
+    geom_sf(data = neighborhood, color = "grey", fill = "transparent")+
+    scale_fill_manual(values = c("green", "yellow", "orange","red")) +
+    labs(title = "Figure 4.6: EMS calls for one week in May 2020",
+         subtitle = "1 hour intervals: {current_frame}") +
+    transition_manual(interval60) +
+    mapTheme
+
+animate(EMS_animation, duration=20, renderer = gifski_renderer())
+
+anim_save("ems_local", EMS_animation, duration=20, renderer = gifski_renderer())
 ```
 
 ```{r histogram of incidents}
@@ -728,6 +1011,66 @@ reg.all <- c("markings", "medHHInc", "median_age", "medianage_female", "medianag
 
 ```
 
+```{r temperal model}
+
+ride.Train <- filter(study.panel, week <= 32) 
+ride.Test <- filter(study.panel, week > 32)
+
+reg_tem <- 
+  lm(EMS_Count ~  hour(interval60) + dotw + Temperature + Precipitation +
+                   lagHour + lag2Hours +lag3Hours +lag12Hours + lag1day, 
+     data=ride.Train)
+
+##nesting
+ride.Test.weekNest <- 
+  ride.Test %>%
+  nest(-week) 
+
+model_pred <- function(dat, fit){
+   pred <- predict(fit, newdata = dat)}
+
+week_predictions <- 
+  ride.Test.weekNest %>% 
+    mutate(Time_Space_FE_timeLags = map(.x = data, fit = reg_tem, .f = model_pred)) %>% 
+    gather(Regression, Prediction, -data, -week) %>%
+    mutate(Observed = map(data, pull, EMS_Count),
+           Absolute_Error = map2(Observed, Prediction,  ~ abs(.x - .y)),
+           MAE = map_dbl(Absolute_Error, mean, na.rm = TRUE),
+           sd_AE = map_dbl(Absolute_Error, sd, na.rm = TRUE))
+
+#PLOT
+week_predictions %>%
+  dplyr::select(week, Regression, MAE) %>%
+  gather(Variable, MAE, -Regression, -week) %>%
+  ggplot(aes(week, MAE)) + 
+    geom_bar(aes(fill = Regression), position = "dodge", stat="identity") +
+    scale_fill_manual(values = palette5) +
+    labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
+  plotTheme
+#the mae is much lower when we use uniqueID instead of reporting-district
+#PLOT AGAINST ACTUAL SERIES
+week_predictions %>% 
+    mutate(interval60 = map(data, pull, interval60),
+           reporting_district = map(data, pull, reporting_district), 
+           latitude = map(data, pull, latitude), 
+           longitude = map(data, pull, longitude)) %>%
+    dplyr::select(interval60, reporting_district, longitude, latitude, Observed, Prediction, Regression) %>%
+    unnest() %>%
+  filter(Regression == "Time_Space_FE_timeLags") %>% ##regresstion
+  group_by(reporting_district, latitude, longitude) %>%
+  summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))%>%
+ggplot(.)+
+  geom_sf(data = (neighborhood %>%
+    st_transform(st_crs(4326))), color = "grey", fill = "transparent")+
+  geom_point(aes(x = longitude, y = latitude, color = MAE), 
+             fill = "transparent", alpha = 0.4)+
+  scale_colour_viridis(direction = -1,
+  discrete = FALSE, option = "D")+
+  ylim(min(dat_census$latitude), max(dat_census$latitude))+
+  xlim(min(dat_census$longitude), max(dat_census$longitude))+
+  labs(title="Figure 5.3: Mean Abs Error, Test Set, Model 4")+
+  mapTheme
+```
 
 #cross-validation
 ```{r CV}
