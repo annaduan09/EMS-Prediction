@@ -128,7 +128,7 @@ ACS <-
 "B01001_006E", "B01001_007E", "B01001_008E", "B01001_009E","B01001_010E", "B01001_011E", "B01001_012E",
 "B01001_031E", "B01001_032E", "B01001_033E", "B01001_034E", "B01001_035E", "B01001_036E",
 "B01002_001E", "B01002_002E","B01002_003E"), year=2018, state=06, county=037, geometry=T) %>%
-  st_transform(st_crs(fishnet))
+    st_transform('EPSG:2225')
 
 ACSTracts <- 
   ACS %>%
@@ -302,10 +302,49 @@ harmful_lu <- parcel%>%filter(specificusetype=="Petroleum and Gas"|generalusetyp
     mutate(Legend = "sport") 
 
 
+ACS$row <- 1:nrow(ACS)
 
-#health <- read.csv("E:/Upenn/CPLN508/final project/EMS-Prediction/healthIndicators.csv")
-health <- read.csv("/Users/annaduan/Documents/GitHub/EMS-Prediction/healthIndicators.csv") 
-acs_health <- dplyr::left_join(ACS, health, by=c("NAME" = "name"))
+#CDC health data
+CDC <-
+  read.socrata("https://chronicdata.cdc.gov/OData.svc/k86t-wghb?stateabbr=CA") %>% 
+  filter(placename == "Santa Monica") %>%
+  dplyr::select(-stateabbr, -placename, -placefips, -place_tractid, -access2_crude95ci, -arthritis_crude95ci, -binge_crude95ci, -bphigh_crude95ci, -bpmed_crude95ci, -cancer_crude95ci, -casthma_crude95ci, -chd_crude95ci, -checkup_crude95ci, -cholscreen_crude95ci, -colon_screen_crude95ci, -copd_crude95ci, -corem_crude95ci, -corew_crude95ci, -csmoking_crude95ci, -dental_crude95ci, -diabetes_crude95ci, -highchol_crude95ci, -kidney_crude95ci, -lpa_crude95ci, -mammouse_crude95ci, -mhlth_crude95ci, -teethlost_crude95ci, -stroke_crude95ci, -sleep_crude95ci, -phlth_crude95ci, -paptest_crude95ci, -obesity_crude95ci) %>%
+  rename(FIPS = tractfips,
+         population = population2010,
+         uninsured = access2_crudeprev,
+arthritis = arthritis_crudeprev,
+bingeDrink = binge_crudeprev,
+highBloodPressure = bphigh_crudeprev,
+bloodPressureMeds = bpmed_crudeprev,
+cancer = cancer_crudeprev,
+asthma = casthma_crudeprev,
+heartDisease = chd_crudeprev,
+doctorCheckups = checkup_crudeprev,
+cholesterolScreen = cholscreen_crudeprev,
+colonScreen65 = colon_screen_crudeprev,
+pulmonaryDisease = copd_crudeprev,
+clinicalServicesMen65 = corem_crudeprev,
+clinicalServicesWomen65 = corew_crudeprev,
+smoking = csmoking_crudeprev,
+dentalVisits = dental_crudeprev,
+diabetes = diabetes_crudeprev,
+highCholesterol = highchol_crudeprev,
+kidneyDisease = kidney_crudeprev,
+noPhysicalActivity = lpa_crudeprev,
+mammograms50 = mammouse_crudeprev,
+poorMentalHealth = mhlth_crudeprev,
+obese = obesity_crudeprev,
+papTest = paptest_crudeprev,
+poorPhysicalHealth = phlth_crudeprev,
+sleepDeprived = sleep_crudeprev,
+stroke = stroke_crudeprev,
+noTeeth = teethlost_crudeprev,
+geometry = geolocation) %>%
+  dplyr::select(-population, -FIPS, -geometry)
+  CDC$row <- 1:nrow(CDC)
+  
+tractData <- left_join(CDC,ACS, by = "row")
+
 
 # ATTACH VARIABLES TO FISHNET
 vars_net <- 
@@ -325,9 +364,9 @@ vars_net_centroid <-
 vars_net %>%
   st_centroid()
 
-vars_net_acs <- vars_net_centroid %>% 
+vars_net_tractData <- vars_net_centroid %>% 
   dplyr::select(uniqueID) %>%
-  st_join(., ACS) %>%
+  st_join(., tractData) %>%
   st_drop_geometry() %>%
   left_join(vars_net,.,by="uniqueID") %>%
   dplyr::select(NAME) %>%
@@ -336,7 +375,7 @@ vars_net_acs <- vars_net_centroid %>%
 
 
 ggplot() + #AD - used this to diagnose hte issue with the missing data/geometries
-  geom_sf(data = ACS, colour = "red", fill = "transparent") +
+  geom_sf(data = tractData, colour = "red", fill = "transparent") +
   geom_sf(data = fishnet, colour = "blue", fill = "transparent") +
   mapTheme()
 
@@ -387,6 +426,9 @@ mapList <- list()
 #AD: fair enough! that makes sense
 neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3c6b3b85c2463ae_0.geojson")%>%
       st_transform(st_crs(fishnet))
+
+
+
 
 ```
 
