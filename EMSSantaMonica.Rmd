@@ -343,7 +343,8 @@ geometry = geolocation) %>%
   dplyr::select(-population, -FIPS, -geometry)
   CDC$row <- 1:nrow(CDC)
   
-tractData <- left_join(CDC,ACS, by = "row")
+tractData <- left_join(CDC,ACS, by = "row") %>%
+  st_as_sf()
 
 
 # ATTACH VARIABLES TO FISHNET
