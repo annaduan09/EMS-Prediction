@@ -102,16 +102,12 @@ nn_function <- function(measureFrom,measureTo,k) {
 
 ```{r wrangle data, cache=TRUE}
 
-#SM Base
+################Santa Monica Base################
 SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
   st_union() %>%
     st_transform('EPSG:2225')
 
-#expanded SM base to capture additional fishnet cells
-#SM_Buffer <- SM_Base %>%
-#  st_buffer(.,6000)
-
-#Census
+################Census Data################
 census_api_key("d9ebfd04caa0138647fbacd94c657cdecbf705e9", install = TRUE, overwrite = TRUE)
 #row 1: vacant, total housing units, mhhinc
 #row 2: white, population, renter occ, owner occ, #no HS degree
@@ -120,7 +116,7 @@ census_api_key("d9ebfd04caa0138647fbacd94c657cdecbf705e9", install = TRUE, overw
 #row 6-7: female 18-34, 
 ###MEDIAN AGE TOTAL, male, female
 
-dd18_5 <- load_variables(year = 2018,dataset = "acs5", cache = TRUE)
+dd18_5 <- load_variables(year = 2018,dataset = "acs5", cache = TRUE) #AD:What's this for?
 
 ACS <-
   get_acs(geography = "tract", variables = c("B25002_003E", "B25001_001E", "B19013_001E", "B01001A_001E", "B01003_001E", "B07013_002E", "B07013_003E", "B06009_002E", 
@@ -130,7 +126,7 @@ ACS <-
 "B01002_001E", "B01002_002E","B01002_003E"), year=2018, state=06, county=037, geometry=T) %>%
     st_transform('EPSG:2225')
 
-ACSTracts <- 
+ACSTracts <-        #AD: what's this?
   ACS %>%
   as.data.frame() %>%
   distinct(GEOID, .keep_all = TRUE) %>%
@@ -203,7 +199,7 @@ ACS <-
          pctMaleYouth = ifelse(population > 0, (male1517 + male1819 + male20 + male21 + male2224 + male2529 + male3034) / population, 0)) %>%
   dplyr::select(-totalUnits,-vacantUnits,-white,-renterOcc,-ownerOcc, -noHsDegree, -maleAdult, -femaleAdult, -youthUnempVet, -youthUnempNonVet, -male1517, -male1819, -male20, -male21, -male2224, -male2529, -male3034, -female1819, -female20, -female21, -female2224, -female2529, -female3034, -poverty)
 
-#Fishnet
+################Fishnet################
 fishnet <- 
   st_make_grid(ACS, cellsize = 500) %>%
   st_sf()
@@ -211,9 +207,26 @@ fishnet <-
 fishnet <- fishnet %>%
   mutate(uniqueID = as.numeric(rownames(.)))
 
+#use this to get rid of fishnet grids outside of census tracts
+fishnet_centroid <- fishnet %>%
+  st_centroid()
 
-#Santa Monica Open Data
-#crime
+tractNames <- ACS %>%
+  dplyr::select(NAME) 
+
+fishnet <- fishnet_centroid %>%
+  st_join(., tractNames) %>%
+  st_drop_geometry() %>%
+  left_join(fishnet,.,by="uniqueID") 
+
+fishnet <- fishnet %>%
+  dplyr::select(NAME) %>%
+  na.omit() %>%
+  mutate(uniqueID = as.numeric(rownames(.)))
+
+
+################Santa Monica Open Data################
+#Crime
 crime <- read.socrata("https://data.smgov.net/OData.svc/ia9m-wspt?Disposition='Arrest'") %>%
     dplyr::select(Y = latitude, X = longitude) %>%
     na.omit() %>%
@@ -227,8 +240,6 @@ violentCrime <- read.socrata("https://data.smgov.net/OData.svc/kn6p-4y74?UCR='01
     st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
     st_transform(st_crs(fishnet)) %>%
     mutate(Legend = "Violent_Crime")
-
-
 
 #trash/dumping
 trash <- read.socrata("https://data.smgov.net/OData.svc/tsas-mvez?topic='Illegal Dumping'") %>%
@@ -256,6 +267,9 @@ weather.Panel <-
     mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
 
 #distance to downtown
+downtown <- ACS %>%
+filter(NAME == "Census Tract 7019.02, Los Angeles County, California") %>%
+  st_centroid()
 
 #distance to water
 
@@ -288,7 +302,8 @@ socialservice <- call311 %>% filter(topic=="General Concerns/Social Service Requ
 #ADD VARIABLE NEAR INDUSTRIAL SITES
 parcel <-  read.socrata("https://data.smgov.net/resource/sa4y-7yah.json")
 lu <- as.data.frame(unique(parcel$specificusetype))
-harmful_lu <- parcel%>%filter(specificusetype=="Petroleum and Gas"|generalusetype=="Industrial")%>%
+harmful_lu <- parcel %>%
+  filter(specificusetype=="Petroleum and Gas"|generalusetype=="Industrial") %>%
   dplyr::select(Y = center_lat, X = center_lon) %>%
     na.omit() %>%
     st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
@@ -365,26 +380,25 @@ vars_net_centroid <-
 vars_net %>%
   st_centroid()
 
-vars_net_tractData <- vars_net_centroid %>% 
-  dplyr::select(uniqueID) %>%
+vars_net_tractData <- vars_net %>% 
+#  dplyr::select(uniqueID) %>%
   st_join(., tractData) %>%
-  st_drop_geometry() %>%
-  left_join(vars_net,.,by="uniqueID") %>%
-  dplyr::select(NAME) %>%
-   na.omit() %>%
+ # st_drop_geometry() %>%
+#  left_join(vars_net,.,by="uniqueID") %>%
+#  dplyr::select(NAME) %>%
+#   na.omit() %>%
     mutate(uniqueID = as.numeric(rownames(.)))
+  
 
 
 ggplot() + #AD - used this to diagnose hte issue with the missing data/geometries
   geom_sf(data = tractData, colour = "red", fill = "transparent") +
-  geom_sf(data = fishnet, colour = "blue", fill = "transparent") +
-  mapTheme()
-
+  geom_sf(data = fishnet, colour = "blue", fill = "transparent") 
 
 
 # MAKE VARS_NET MAPPABLE
 vars_net.long <- 
-  gather(vars_net_acs, Variable, value, -geometry, -uniqueID)
+  gather(vars_net_tractData, Variable, value, -geometry, -uniqueID)
 
 vars <- unique(vars_net.long$Variable)
 mapList <- list()
@@ -394,8 +408,8 @@ mapList <- list()
 st_c <- st_coordinates
 st_coid <- st_centroid
 
-vars_net_acs <-
-  vars_net_acs %>%
+vars_net_tractData <-
+  vars_net_tractData %>%
     mutate(
       violentCrime.nn =
         nn_function(st_c(st_coid(vars_net)), st_c(violentCrime),3),
@@ -483,7 +497,7 @@ EMS_net.resp <-
 EMS_net <- full_join(EMS_net.count, st_drop_geometry(EMS_net.resp), by = c("uniqueID"))
 
 final_net <-
-  inner_join(EMS_net, st_drop_geometry(vars_net_acs), by="uniqueID") #AD: something wrong here: it doesn't add the ACS columns...
+  inner_join(EMS_net, st_drop_geometry(vars_net_tractData), by="uniqueID") #AD: something wrong here: it doesn't add the ACS columns...
 
 #EMS SINCE 2010
 EMS_net.count.emg <- 
