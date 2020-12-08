@@ -103,9 +103,15 @@ nn_function <- function(measureFrom,measureTo,k) {
 ```{r wrangle data, cache=TRUE}
 
 #SM Base
-SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
+#SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
+SM_Base <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/SMTracts") %>%
   st_union() %>%
     st_transform('EPSG:2225')
+
+xmin = st_bbox(SM_Base)[[1]]
+ymin = st_bbox(SM_Base)[[2]]
+xmax = st_bbox(SM_Base)[[3]]  
+ymax = st_bbox(SM_Base)[[4]]
 
 #expanded SM base to capture additional fishnet cells
 #SM_Buffer <- SM_Base %>%
@@ -138,8 +144,8 @@ ACSTracts <-
   st_sf %>%
   st_transform('EPSG:2225')
 
-###need to subset here
-ACSTracts <- 
+###need to subset here 7012.01 - 7023
+ACSTracts <- subset(ACSTracts,  GEOID >= 06037701201 & GEOID <= 06037702300)
 #####
 
 ACS <-
@@ -239,12 +245,13 @@ trash <- read.socrata("https://data.smgov.net/OData.svc/tsas-mvez?topic='Illegal
     mutate(Legend = "Trash") 
 
 #weather
+#vsby: visibility; sknt:wind speed; gust:wind gust in knots
 library(riem)
 library(dplyr)
 library(lubridate)
 weather.Panel <- 
   riem_measures(station = "KSMO", date_start = "2020-01-01", date_end = "2020-11-27") %>%
-  dplyr::select(valid, tmpf, p01i, sknt) %>%
+  dplyr::select(valid, tmpf, p01i, sknt, vsby, gust) %>%
   replace(is.na(.), 0) %>%
     mutate(interval60 = ymd_h(substr(valid,1,13))) %>%
     mutate(week = week(interval60),
@@ -252,12 +259,29 @@ weather.Panel <-
     group_by(interval60) %>%
     summarize(Temperature = max(tmpf),
               Precipitation = sum(p01i),
-              Wind_Speed = max(sknt)) %>%
+              Wind_Speed = max(sknt),
+              visibility = sum(vsby),
+              wind_gust = max(gust)) %>%
     mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
 
 #distance to downtown
+zipcode <- st_read("https://opendata.arcgis.com/datasets/0b879034d6954177a1c3bac61039f204_0.geojson")%>%
+    st_transform(st_crs(fishnet))
+downtown <- subset(zipcode, ZIPCODE == "90401")
+downtown_tract <- subset(ACSTracts, GEOID == 06037701902)
+#7019.02
 
 #distance to water
+coastline <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/coastline.geojson")%>%
+    st_transform(st_crs(fishnet))
+
+#distance to bars
+bars <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/bar.geojson")%>%
+    st_transform(st_crs(fishnet))
+
+#intersection-not complete
+intersections <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/intersection.geojson")%>%
+    st_transform(st_crs(fishnet))
 
 #311 calls
 call311 <- read.socrata("https://data.smgov.net/resource/tsas-mvez.json")
@@ -296,8 +320,8 @@ harmful_lu <- parcel%>%filter(specificusetype=="Petroleum and Gas"|generalusetyp
     mutate(Legend = "harmfullanduse")
 
 #osm
-#sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
-  sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
+sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
+  #sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
     st_transform(st_crs(fishnet))%>%
     mutate(Legend = "sport") 
 
@@ -427,9 +451,6 @@ mapList <- list()
 neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3c6b3b85c2463ae_0.geojson")%>%
       st_transform(st_crs(fishnet))
 
-
-
-
 ```
 
 
@@ -440,8 +461,6 @@ EMS <- read.socrata("https://data.smgov.net/Public-Safety/Fire-Calls-for-Service
 dplyr::select (-census_block_2010_geoid, -census_tract_2010_geoid, -census_block_2000_geoid, -census_tract_2000_geoid)
 
 EMS_int <- EMS %>% mutate (interval = difftime(cleared,received,units = "min"))
-
-
 EMS_int$incident_date <- as.POSIXct(EMS_int$incident_date)
 
 EMS_2020 <- subset(EMS_int,
@@ -453,6 +472,25 @@ EMS2020.sf <- na.omit(EMS_2020, cols=c("longitude", "latitude")) %>%
     st_as_sf(coords = c("longitude", "latitude"), crs = 4326, agr = "constant") %>%
     st_transform('EPSG:2225')
 
+##can't work for now
+EMS2020.sf <-
+  EMS2020.sf %>%
+  mutate(CoastDist=(geosphere::dist2Line(p=st_coordinates(st_centroid(EMS2020.sf)),
+                                        line=st_coordinates(coastline$osm_lines)[,1:2])*0.00062137)[,1],
+         distWater = housesOSM$CoastDist,
+         SPSqFt = ifelse(!is.na(ActualSqFt)&!is.na(SalePrice), SalePrice / ActualSqFt, 0))
+
+EMS2020.sf <-
+  EMS2020.sf %>%
+    mutate(
+      bar.nn =
+        nn_function(st_c(st_coid(EMS2020.sf)), st_c(bars),1),
+      sport.nn =
+        nn_function(st_c(st_coid(EMS2020.sf)), st_c(st_coid(sport)),1),
+      downtown.nn =
+        nn_function(st_c(st_coid(EMS2020.sf)), st_c(st_coid(downtown)),3),
+      intersection.nn = 
+        nn_function(st_c(st_coid(EMS2020.sf)), st_c(intersections),3))
 
 emergencies <- EMS_int %>%
   dplyr::filter(., grepl('201', incident_date))  #filter for incidents since 2010
@@ -999,6 +1037,10 @@ grid.arrange(
     labs(title="Wind Speed", x="Month", y="Wind Speed") + plotTheme(),
   ggplot(weather.Panel, aes(interval60,Temperature)) + geom_line() + 
     labs(title="Temperature", x="Month", y="Temperature") + plotTheme(),
+  ggplot(weather.Panel, aes(interval60,visibility)) + geom_line() + 
+    labs(title="Temperature", x="Month", y="visibility") + plotTheme(),
+  ggplot(weather.Panel, aes(interval60,wind_gust)) + geom_line() + 
+    labs(title="Temperature", x="Month", y="wind gust") + plotTheme(),
   top="Weather Data - Santa Monica CA - Jan - Nov 2020")
 ```
 
@@ -1113,6 +1155,45 @@ ggplot(.)+
   labs(title="Figure 5.3: Mean Abs Error, Test Set, Model 4")+
   mapTheme
 ```
+
+```{r spatial bi model}
+#haven't tried
+set.seed(10)
+trainIndex <- createDataPartition(final_net$count_EMS, 
+                                  p = .65,
+                                  list = FALSE,
+                                  times = 1)
+EMSTrain <- housingsubsidy[ trainIndex,]
+EMSTest  <- housingsubsidy[-trainIndex,]
+
+reg0 <- glm(CountEMS ~ .,
+                  data=EMSTrain %>% 
+                    dplyr::select(-CountEMS), #delete all the NAs
+                  family="binomial" (link="logit"))
+
+testProbs_ks <- data.frame(Outcome = as.factor(EMSTestt$Count_EMS),
+                        Probs = predict(reg0, EMSTest, type= "response"))
+
+testProbs_ks <- 
+  testProbs_ks %>%
+  mutate(predOutcome  = as.factor(ifelse(testProbs_ks$Probs > 0.5 , 1, 0))) 
+
+#confusion matrix
+caret::confusionMatrix(testProbs_ks$predOutcome, testProbs_ks$Outcome, 
+                       positive = "1")
+
+#ROC
+ggplot(testProbs_ks, aes(d = as.numeric(Outcome), m = Probs)) +
+  geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") + 
+  style_roc(theme = theme_grey) +
+  geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
+  labs(title = "Figure 4.1: ROC Curve - features model")
+
+#area under curve 
+pROC::auc(testProbs_ks$Outcome, testProbs_ks$Probs) 
+
+```
+
 
 #cross-validation
 ```{r CV}
