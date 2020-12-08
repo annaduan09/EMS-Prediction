@@ -317,6 +317,11 @@ harmful_lu <- parcel %>%
     mutate(Legend = "sport") 
 
 
+#neighborhood orgs (http://www.city-data.com/nbmaps/neigh-Santa-Monica-California.html)
+neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3c6b3b85c2463ae_0.geojson")%>%
+  dplyr::select()
+      st_transform(st_crs(fishnet))  #AD: some of these overlap, and some parts of fishnet aren't covered. I will try to find neighborhood boundaries.
+
 ACS$row <- 1:nrow(ACS)
 
 #CDC health data
@@ -380,20 +385,19 @@ vars_net_centroid <-
 vars_net %>%
   st_centroid()
 
-vars_net_tractData <- vars_net %>% 
-#  dplyr::select(uniqueID) %>%
+vars_net_tractData <- vars_net_centroid %>% 
+  dplyr::select(uniqueID) %>%
   st_join(., tractData) %>%
- # st_drop_geometry() %>%
-#  left_join(vars_net,.,by="uniqueID") %>%
-#  dplyr::select(NAME) %>%
-#   na.omit() %>%
-    mutate(uniqueID = as.numeric(rownames(.)))
+  st_drop_geometry() %>%
+  left_join(vars_net,.,by="uniqueID") %>%
+  dplyr::select(-NAME.y) %>%
+  rename(tract = NAME.x) %>%
+  st_as_sf() 
   
 
-
 ggplot() + #AD - used this to diagnose hte issue with the missing data/geometries
-  geom_sf(data = tractData, colour = "red", fill = "transparent") +
-  geom_sf(data = fishnet, colour = "blue", fill = "transparent") 
+  geom_sf(data = vars_net_tractData, colour = "red", fill = "transparent") +
+  geom_sf(data = tractData, colour = "blue", fill = "transparent") 
 
 
 # MAKE VARS_NET MAPPABLE
@@ -429,18 +433,13 @@ vars_net_tractData <-
         nn_function(st_c(st_coid(vars_net)), st_c(st_coid(sport)),1))
 
 vars_net.long.nn <- 
-  dplyr::select(vars_net_acs, ends_with(".nn")) %>%
+  dplyr::select(vars_net_tractData, ends_with(".nn")) %>%
     gather(Variable, value, -geometry)
 
 vars <- unique(vars_net.long.nn$Variable)
 mapList <- list()
 
 
-#AD: not sure this is neighborhood- neighborhood association is different
-#BC: sadly it's the only data we have got. I think these two may be very similar? http://www.city-data.com/nbmaps/neigh-Santa-Monica-California.html
-#AD: fair enough! that makes sense
-neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3c6b3b85c2463ae_0.geojson")%>%
-      st_transform(st_crs(fishnet))
 
 
 
@@ -453,75 +452,75 @@ neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3
 #EMS
 EMS <- read.socrata("https://data.smgov.net/Public-Safety/Fire-Calls-for-Service/5y3u-5db4?call_type_description=Emergency Medical Service (EMS)")%>% 
 dplyr::select (-census_block_2010_geoid, -census_tract_2010_geoid, -census_block_2000_geoid, -census_tract_2000_geoid)
-
-EMS_int <- EMS %>% mutate (interval = difftime(cleared,received,units = "min"))
-
-
+#time intervals
+EMS_int <- EMS %>%
+  mutate (interval = difftime(cleared,received,units = "min"))
 EMS_int$incident_date <- as.POSIXct(EMS_int$incident_date)
 
+#2020 calls
 EMS_2020 <- subset(EMS_int,
      incident_date >= as.POSIXct('2020-01-01') &
-     incident_date <= as.POSIXct('2020-11-27')
+     incident_date <= as.POSIXct('2020-12-09')
      ) 
-
+#make SF
 EMS2020.sf <- na.omit(EMS_2020, cols=c("longitude", "latitude")) %>%  
     st_as_sf(coords = c("longitude", "latitude"), crs = 4326, agr = "constant") %>%
     st_transform('EPSG:2225')
 
-
-emergencies <- EMS_int %>%
-  dplyr::filter(., grepl('201', incident_date))  #filter for incidents since 2010
-#  dplyr::filter(., grepl('Report', disposition)) %>%
-emergencies.sf <- na.omit(emergencies, cols=c("longitude", "latitude")) %>%  
+#2010-2020 calls
+EMS_2010_2020 <- EMS_int %>%
+  dplyr::filter(., grepl('201', incident_date)) 
+#make SF
+EMS_2010_2020.sf <- na.omit(EMS_2010_2020, cols=c("longitude", "latitude")) %>%  
     st_as_sf(coords = c("longitude", "latitude"), crs = 4326, agr = "constant") %>%
     st_transform('EPSG:2225')
 
 
 #EMS Net
-EMS_net.count <- 
+EMS2020_net.count <- 
   dplyr::select(EMS2020.sf) %>% 
   mutate(countEMS = 1) %>% 
   aggregate(., fishnet, sum) %>%
   mutate(countEMS = replace_na(countEMS, 0),
-         uniqueID = as.numeric(rownames(.)),
-         cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
+         uniqueID = as.numeric(rownames(.)))
+         #,
+         #cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
 
-EMS_net.resp <- 
+EMS2020_net.response <- 
   dplyr::select(EMS2020.sf) %>% 
-  mutate(resp = na.omit(EMS2020.sf$interval)) %>% 
+  mutate(responseTime = na.omit(EMS2020.sf$interval)) %>% 
   aggregate(., fishnet, mean) %>%
-  mutate(resp = replace_na(resp, 0),
+  mutate(responseTime = replace_na(responseTime, 0),
          uniqueID = as.numeric(rownames(.)),
          cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
 
-EMS_net <- full_join(EMS_net.count, st_drop_geometry(EMS_net.resp), by = c("uniqueID"))
+EMS2020_net <- full_join(EMS2020_net.count, st_drop_geometry(EMS2020_net.response), by = c("uniqueID"))
 
 final_net <-
-  inner_join(EMS_net, st_drop_geometry(vars_net_tractData), by="uniqueID") #AD: something wrong here: it doesn't add the ACS columns...
+  inner_join(EMS2020_net, st_drop_geometry(vars_net_tractData), by="uniqueID")
 
 #EMS SINCE 2010
 EMS_net.count.emg <- 
-  dplyr::select(emergencies.sf) %>% 
+  dplyr::select(EMS_2010_2020.sf) %>% 
   mutate(countEMS = 1) %>% 
   aggregate(., fishnet, sum) %>%
   mutate(countEMS = replace_na(countEMS, 0),
-         uniqueID = rownames(.),
-         cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
+         uniqueID = as.numeric(rownames(.)))
 
-EMS_net.resp.emg <- 
-  dplyr::select(emergencies.sf) %>% 
-  mutate(resp = na.omit(emergencies.sf$interval)) %>% 
+EMS_net.response.emg <- 
+  dplyr::select(EMS_2010_2020.sf) %>% 
+  mutate(responseTime = na.omit(EMS_2010_2020.sf$interval)) %>% 
   aggregate(., fishnet, mean) %>%
-  mutate(resp = replace_na(resp, 0),
-         uniqueID = rownames(.),
+  mutate(responseTime = replace_na(responseTime, 0),
+         uniqueID = as.numeric(rownames(.)),
          cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
 
-EMS_net.emg <- full_join(EMS_net.count.emg, st_drop_geometry(EMS_net.resp.emg), by = c("uniqueID", "cvID"))
+EMS_net.emg <- full_join(EMS_net.count.emg, st_drop_geometry(EMS_net.response.emg), by = "uniqueID")
 
 
 #Map 2020 emergencies
 ggplot() +
-  geom_sf(data = EMS_net, aes(fill = countEMS, colour = countEMS)) +
+  geom_sf(data = EMS2020_net, aes(fill = countEMS, colour = countEMS)) +
 #  geom_sf(data = ACS, fill = "transparent", colour = "white") +
   scale_fill_viridis(option = "A", name = "Incidents Per Cell") +
   scale_colour_viridis(option = "A", name = "Incidents Per Cell") +
@@ -529,16 +528,16 @@ ggplot() +
   mapTheme()
 
 ggplot() +
-  geom_sf(data = SM_Base, fill = "black") +
-  geom_sf(data = emergencies.sf, colour = "red", size = 0.1) +
-  scale_colour_viridis(name = "1 Observed EMS", labels = "", option = "B") +
-  labs(title = "Figure 1: Observed EMS, 2010-2019", subtitle = "Santa Monica, CA") +
+  geom_sf(data = EMS_net.emg, aes(fill = countEMS, colour = countEMS)) +
+  scale_fill_viridis(option = "A", name = "Incidents Per Cell") +
+  scale_colour_viridis(option = "A", name = "Incidents Per Cell") +
+  labs(title = "Observed EMS Calls Joined to Fishnet, 2010-2020", subtitle = "Santa Monica, CA") +
   mapTheme()
 
 
 #Map response time 2020
   ggplot() +
-  geom_sf(data = EMS_net, aes(fill = resp, colour = resp)) +
+  geom_sf(data = EMS2020_net.response, aes(fill = responseTime, colour = responseTime)) +
   scale_fill_viridis(option = "A", name = "Minutes") +
   scale_colour_viridis(option = "A", name = "Minutes") +
   labs(title = "Average EMS Response Time Joined to Fishnet, 2020", subtitle = "Santa Monica, CA") +
@@ -546,7 +545,7 @@ ggplot() +
 
 #Map response time since 2010
   ggplot() +
-  geom_sf(data = EMS_net.emg, aes(fill = resp, colour = resp)) +
+  geom_sf(data = EMS_net.emg, aes(fill = responseTime, colour = responseTime)) +
   scale_fill_viridis(option = "A", name = "Minutes") +
   scale_colour_viridis(option = "A", name = "Minutes") +
   labs(title = "Figure 2: EMS Response Time Joined to Fishnet, 2010-2020", subtitle = "Santa Monica, CA") +
@@ -554,9 +553,8 @@ ggplot() +
 
 
 ggplot() + 
-
-  #geom_sf(data = ACS, fill = "black") +
-  stat_density2d(data = data.frame(st_coordinates(emergencies.sf)), 
+  geom_sf(data = ACS, fill = "black") +
+  stat_density2d(data = data.frame(st_coordinates(EMS_2010_2020.sf)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.1, bins = 200, geom = 'polygon') +
   scale_fill_gradient(low = "yellow", high = "red", 
@@ -622,7 +620,7 @@ EMS2020.sf <- EMS2020.sf %>%
 
 
 
-EMS_2010 <- emergencies %>%
+EMS_2010 <- EMS_2010_2020 %>%
   mutate(interval60 = floor_date(ymd_hms(received), unit = "hour"),
          interval15 = floor_date(ymd_hms(received), unit = "15 mins"),
          interval5 = floor_date(ymd_hms(received), unit = "5 mins"),
@@ -631,28 +629,43 @@ EMS_2010 <- emergencies %>%
          dotw = wday(interval60, label=TRUE)) 
 
 #add census tracts
-dat_census <- st_join(EMS_2020 %>% 
+library(dplyr)
+
+EMS_2020 <- EMS_2020 %>% 
+        #  filter(is.na(longitude) == FALSE &
+             #      is.na(latitude) == FALSE) %>%
+          st_as_sf(., coords = c("longitude", "latitude"), crs = 4326) %>%
+      st_transform(st_crs(fishnet))
+
+
+EMS_2010 <- EMS_2010 %>% 
           filter(is.na(longitude) == FALSE &
                    is.na(latitude) == FALSE) %>%
-          st_as_sf(., coords = c("longitude", "latitude"), crs = 4326),
-        ACSTracts %>%
-          st_transform(crs=4326),
+          st_as_sf(., coords = c("longitude", "latitude"), crs = 4326) %>%
+      st_transform(st_crs(fishnet))
+
+ACSTracts <- ACSTracts %>%
+          st_transform(crs=4326) %>%
+  st_as_sf() %>%
+  st_transform(st_crs(fishnet))
+
+
+dat_census <- st_join(EMS_2020,
+        ACSTracts,
         join=st_intersects,
               left = TRUE) %>%
+  mutate(longitude = unlist(map(geometry, 1)),
+         latitude = unlist(map(geometry, 2))) %>%
+  as.data.frame() 
+
+
+
+dat_net <- st_join(EMS_2020,fishnet, join=st_intersects,left = TRUE) %>%
   mutate(longitude = unlist(map(geometry, 1)),
          latitude = unlist(map(geometry, 2)))%>%
   as.data.frame() 
 
-library(dplyr)
-
-dat_net <- st_join(EMS_2020 %>% 
-          filter(is.na(longitude) == FALSE &
-                   is.na(latitude) == FALSE) %>%
-          st_as_sf(., coords = c("longitude", "latitude"), crs = 4326),
-        fishnet %>%
-          st_transform(crs=4326),
-        join=st_intersects,
-              left = TRUE) %>%
+dat_net.2010 <- st_join(EMS_2010,fishnet, join=st_intersects,left = TRUE) %>%
   mutate(longitude = unlist(map(geometry, 1)),
          latitude = unlist(map(geometry, 2)))%>%
   as.data.frame() 
