@@ -33,43 +33,68 @@ library(mapview)
 library(devtools)
 library(lubridate)
 library(dplyr)
+
+options(scipen=999)
+options(tigris_class = "sf")
+
 root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
 source_url("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
 paletteGray <- c("gray90", "gray70", "gray50", "gray30", "gray10")
 
 
-plotTheme <- theme(
-  plot.title =element_text(size=12),
-  plot.subtitle = element_text(size=8),
-  plot.caption = element_text(size = 6),
-  axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
-  axis.text.y = element_text(size = 10),
-  axis.title.y = element_text(size = 10),
-  # Set the entire chart region to blank
-  panel.background=element_blank(),
-  plot.background=element_blank(),
-  #panel.border=element_rect(colour="#F0F0F0"),
-  # Format the grid
-  panel.grid.major=element_line(colour="#D0D0D0",size=.2),
-  axis.ticks=element_blank())
+mapTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 14,colour = "black"),
+    plot.subtitle=element_text(face="italic"),
+    plot.caption=element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2)
+  )
+}
 
-mapTheme <- theme(plot.title =element_text(size=12),
-                  plot.subtitle = element_text(size=8),
-                  plot.caption = element_text(size = 6),
-                  axis.line=element_blank(),
-                  axis.text.x=element_blank(),
-                  axis.text.y=element_blank(),
-                  axis.ticks=element_blank(),
-                  axis.title.x=element_blank(),
-                  axis.title.y=element_blank(),
-                  panel.background=element_blank(),
-                  panel.border=element_blank(),
-                  panel.grid.major=element_line(colour = 'transparent'),
-                  panel.grid.minor=element_blank(),
-                  legend.direction = "vertical", 
-                  legend.position = "right",
-                  plot.margin = margin(1, 1, 1, 1, 'cm'),
-                  legend.key.height = unit(1, "cm"), legend.key.width = unit(0.2, "cm"))
+plotTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 14,colour = "black"),
+    plot.subtitle = element_text(face="italic"),
+    plot.caption = element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major = element_line("grey80", size = 0.1),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    strip.background = element_rect(fill = "grey80", color = "white"),
+    strip.text = element_text(size=12),
+    axis.title = element_text(size=12),
+    axis.text = element_text(size=10),
+    plot.background = element_blank(),
+    legend.background = element_blank(),
+    legend.title = element_text(colour = "black", face = "italic"),
+    legend.text = element_text(colour = "black", face = "italic"),
+    strip.text.x = element_text(size = 14)
+  )
+}
+
+palette5 <- c("#c8ddfa", "#8cb5ed", "#5890db",   "#2868bd", "#023578")
+paletteMap <- c("gray90","gray70","gray50","gray30","gray10")
+
+qBr <- function(df, variable, rnd) {
+  if (missing(rnd)) {
+    as.character(quantile(round(df[[variable]],0),
+                          c(.01,.2,.4,.6,.8), na.rm=T))
+  } else if (rnd == FALSE | rnd == F) {
+    as.character(formatC(quantile(df[[variable]]), digits = 3),
+                 c(.01,.2,.4,.6,.8), na.rm=T)
+  }
+}
+
+q5 <- function(variable) {as.factor(ntile(variable, 5))}
 
 
 palette5 <- c("#eff3ff","#bdd7e7","#6baed6","#3182bd","#08519c")
@@ -103,8 +128,8 @@ nn_function <- function(measureFrom,measureTo,k) {
 ```{r wrangle data, cache=TRUE}
 
 ################Santa Monica Base################
-#SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
-SM_Base <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/SMTracts") %>%
+SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
+#SM_Base <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/SMTracts") %>%
   st_union() %>%
     st_transform('EPSG:2225')
 
@@ -113,9 +138,6 @@ ymin = st_bbox(SM_Base)[[2]]
 xmax = st_bbox(SM_Base)[[3]]  
 ymax = st_bbox(SM_Base)[[4]]
 
-#expanded SM base to capture additional fishnet cells
-#SM_Buffer <- SM_Base %>%
-#  st_buffer(.,6000)
 
 ################Census Data################
 census_api_key("d9ebfd04caa0138647fbacd94c657cdecbf705e9", install = TRUE, overwrite = TRUE)
@@ -260,7 +282,7 @@ trash <- read.socrata("https://data.smgov.net/OData.svc/tsas-mvez?topic='Illegal
     mutate(Legend = "Trash") 
 
 #weather
-#vsby: visibility; sknt:wind speed; gust:wind gust in knots
+#vsby: visibility; sknt:wind speed; gust:wind gust in knots #AD: wow this is cool!
 library(riem)
 library(dplyr)
 library(lubridate)
@@ -290,21 +312,21 @@ filter(NAME == "Census Tract 7019.02, Los Angeles County, California") %>%
   st_centroid()
 
 #distance to water
-coastline <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/coastline.geojson")%>%
-    st_transform(st_crs(fishnet))
-coastline <- st_read("") %>%
+#coastline <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/coastline.geojson")%>%
+#    st_transform(st_crs(fishnet))
+coastline <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/coastline.geojson") %>%
 st_transform(st_crs(fishnet))
 
 #distance to bars
-bars <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/bar.geojson")%>%
-    st_transform(st_crs(fishnet))
-bars <- st_read("") %>%
+#bars <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/bar.geojson")%>%
+#    st_transform(st_crs(fishnet))
+bars <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/bar.geojson") %>%
 st_transform(st_crs(fishnet))
 
 #intersection-not complete
-intersections <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/intersection.geojson")%>%
-    st_transform(st_crs(fishnet))
-intersections <- st_read("") %>%
+#intersections <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/intersection.geojson")%>%
+#    st_transform(st_crs(fishnet))
+intersections <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/intersection.geojson") %>%
 st_transform(st_crs(fishnet))
 
 #311 calls
@@ -345,15 +367,14 @@ harmful_lu <- parcel %>%
     mutate(Legend = "harmfullanduse")
 
 #osm
-sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
-  #sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
+#sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
+sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
     st_transform(st_crs(fishnet))%>%
     mutate(Legend = "sport") 
 
 
 #neighborhood orgs (http://www.city-data.com/nbmaps/neigh-Santa-Monica-California.html)
 neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3c6b3b85c2463ae_0.geojson")%>%
-  dplyr::select()
       st_transform(st_crs(fishnet))  #AD: some of these overlap, and some parts of fishnet aren't covered. I will try to find neighborhood boundaries.
 
 ACS$row <- 1:nrow(ACS)
@@ -429,9 +450,9 @@ vars_net_tractData <- vars_net_centroid %>%
   st_as_sf() 
   
 
-ggplot() + #AD - used this to diagnose hte issue with the missing data/geometries
-  geom_sf(data = vars_net_tractData, colour = "red", fill = "transparent") +
-  geom_sf(data = tractData, colour = "blue", fill = "transparent") 
+#ggplot() + #AD - used this to diagnose hte issue with the missing data/geometries
+#  geom_sf(data = vars_net_tractData, colour = "red", fill = "transparent") +
+#  geom_sf(data = tractData, colour = "blue", fill = "transparent") 
 
 
 # MAKE VARS_NET MAPPABLE
@@ -464,7 +485,15 @@ vars_net_tractData <-
       harmfullu.nn = 
         nn_function(st_c(st_coid(vars_net)), st_c(harmful_lu),1),
       sport.nn = 
-        nn_function(st_c(st_coid(vars_net)), st_c(st_coid(sport)),1))
+        nn_function(st_c(st_coid(vars_net)), st_c(st_coid(sport)),1),
+      bar.nn =
+        nn_function(st_c(st_coid(vars_net)), st_c(bars),1),
+      sport.nn =
+        nn_function(st_c(st_coid(vars_net)), st_c(st_coid(sport)),1),
+      downtown.nn =
+        nn_function(st_c(st_coid(vars_net)), st_c(st_coid(downtown)),1),
+      intersection.nn = 
+        nn_function(st_c(st_coid(vars_net)), st_c(intersections),3))
 
 vars_net.long.nn <- 
   dplyr::select(vars_net_tractData, ends_with(".nn")) %>%
@@ -504,8 +533,7 @@ EMS2020.sf <-
   EMS2020.sf %>%
   mutate(CoastDist=(geosphere::dist2Line(p=st_coordinates(st_centroid(EMS2020.sf)),
                                         line=st_coordinates(coastline$osm_lines)[,1:2])*0.00062137)[,1],
-         distWater = housesOSM$CoastDist,
-         SPSqFt = ifelse(!is.na(ActualSqFt)&!is.na(SalePrice), SalePrice / ActualSqFt, 0))
+         distWater = EMS2020.sf$CoastDist)
 
 EMS2020.sf <-
   EMS2020.sf %>%
@@ -519,10 +547,6 @@ EMS2020.sf <-
       intersection.nn = 
         nn_function(st_c(st_coid(EMS2020.sf)), st_c(intersections),3))
 
-emergencies <- EMS_int %>%
-  dplyr::filter(., grepl('201', incident_date))  #filter for incidents since 2010
-#  dplyr::filter(., grepl('Report', disposition)) %>%
-emergencies.sf <- na.omit(emergencies, cols=c("longitude", "latitude")) %>%  
 
 #2010-2020 calls
 EMS_2010_2020 <- EMS_int %>%
@@ -1137,7 +1161,7 @@ ggplot(correlation.long, aes(Value, countEMS)) +
 
 #modeling
 ```{r modeling}
-reg.all <- c("markings", "medHHInc", "median_age", "medianage_female", "medianage_male", "notWorking", "obese", "pctMaleYouth", "pctNoHS", "pctPoverty", "pctRenterOcc", "pctVacant", "pctWhite", "population", "resp", "servicerequest", "signandmarking.nn", "sport.nn", "streetlightissue.nn", "Trash", "trash.nn", "Violent_Crime", "youthUnemploy", "deoayedMedCare", "diagnoseAsthma", "diagnoseDiabetes", "diagnoseHeartDisease", "harmfullanduse", "harmfullu.nn", "socialservice.nn", "streetlights", "uninsured", "violentCrime.nn")
+reg.all <- c("harmfullanduse", "markings", "servicerequest", "streetlights", "Trash", "Violent_Crime", "uninsured", "arthritis", "bingeDrink", "highBloodPressure", "bloodPressureMeds", "cancer", "asthma", "heartDisease", "doctorCheckups", "cholesterolScreen", "colonScreen65", "pulmonaryDisease", "clinicalServicesMen65", "clinicalServicesWomen65", "smoking", "dentalVisits", "diabetes", "highCholesterol", "kidneyDisease", "noPhysicalActivity", "mammograms50", "poorMentalHealth", "obese", "papTest", "poorPhysicalHealth", "sleepDeprived", "stroke", "noTeeth", "median_age", "medianage_male", "medianage_female", "population", "medHHInc", "pctVacant", "pctWhite", "pctRenterOcc", "pctNoHS", "pctPoverty", "youthUnemploy", "pctMaleYouth", "violentCrime.nn", "trash.nn", "streetlightissue.nn", "signandmarking.nn", "socialservice.nn", "harmfullu.nn", "sport.nn", "bar.nn", "intersection.nn", "downtown.nn", "EMS.isSig", "EMS.isSig.dist")
 
 
 ```
@@ -1206,19 +1230,21 @@ ggplot(.)+
 ```{r spatial bi model}
 #haven't tried
 set.seed(10)
-trainIndex <- createDataPartition(final_net$count_EMS, 
+trainIndex <- createDataPartition(final_net$countEMS, 
                                   p = .65,
                                   list = FALSE,
                                   times = 1)
-EMSTrain <- housingsubsidy[ trainIndex,]
-EMSTest  <- housingsubsidy[-trainIndex,]
+EMSTrain <- final_net[ trainIndex,]
+EMSTest  <- final_net[-trainIndex,]
 
-reg0 <- glm(CountEMS ~ .,
-                  data=EMSTrain %>% 
-                    dplyr::select(-CountEMS), #delete all the NAs
+reg0 <- glm(countEMS ~ .,
+                  data=st_drop_geometry(EMSTrain) %>% 
+                    dplyr::select(countEMS, harmfullanduse, markings, servicerequest, streetlights, Trash, Violent_Crime, uninsured, arthritis, bingeDrink, highBloodPressure, bloodPressureMeds, cancer, asthma, heartDisease, doctorCheckups, cholesterolScreen, colonScreen65, pulmonaryDisease, clinicalServicesMen65, clinicalServicesWomen65, smoking, dentalVisits, diabetes, highCholesterol, kidneyDisease, noPhysicalActivity, mammograms50, poorMentalHealth, obese, papTest, poorPhysicalHealth, sleepDeprived, stroke, noTeeth, median_age, medianage_male, medianage_female, population, medHHInc, pctVacant, pctWhite, pctRenterOcc, pctNoHS, pctPoverty, youthUnemploy, pctMaleYouth, violentCrime.nn, trash.nn, streetlightissue.nn, signandmarking.nn, socialservice.nn, harmfullu.nn, sport.nn, bar.nn, intersection.nn, downtown.nn, EMS.isSig, EMS.isSig.dist))
+            
+            , #delete all the NAs
                   family="binomial" (link="logit"))
 
-testProbs_ks <- data.frame(Outcome = as.factor(EMSTestt$Count_EMS),
+testProbs_ks <- data.frame(Outcome = as.factor(EMSTest$Count_EMS),
                         Probs = predict(reg0, EMSTest, type= "response"))
 
 testProbs_ks <- 
@@ -1279,16 +1305,20 @@ for (i in cvID_list) {
 #all variables
 reg.cv <- crossValidate(
   dataset = final_net,
-  id = "cvID.x",
+  id = "cvID",
   dependentVariable = "countEMS",
   indVariables = reg.all) %>%
     dplyr::select(cvID = cvID, countEMS, Prediction, geometry)
 
 
 reg.summary <- 
-    mutate(reg.cv,           Error = Prediction - countEMS,
-                             Regression = "Random k-fold CV: Just Risk Factors") %>%
+    mutate(reg.cv,
+           Error = Prediction - countEMS,
+           PercentError = Error / Prediction,
+           Regression = "Random k-fold CV: All") %>%
     st_sf() 
+
+reg.summary
 ```
 
 
