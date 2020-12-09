@@ -881,16 +881,6 @@ as.data.frame(study.panel.2010) %>%
     summarize(correlation = round(cor(Value, EMS_Count),2)) %>%
     kable (caption="Table 3: Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
     kable_styling()
-
-plotData.lag <-
-  filter(as.data.frame(study.panel)) %>%
-  dplyr::select(starts_with("lag"), EMS_Count) %>%
-  gather(Variable, Value, -EMS_Count) %>%
-  mutate(Variable = fct_relevel(Variable, "lagHour","lag2Hours","lag3Hours",
-                                          "lag4Hours","lag12Hours","lag1day"))
-correlation.lag <-
-  group_by(plotData.lag, Variable) %>%
-    summarize(correlation = round(cor(Value,EMS_Count, use = "complete.obs"), 2)) 
 ```
 
 ```{r time explotory rush hour}
