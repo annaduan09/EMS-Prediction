@@ -917,14 +917,6 @@ EMS.Test <- subset(study.panel,
 
 
 
-
-
-
-
-
-
-
-
 as.data.frame(study.panel) %>%
     group_by(interval60) %>% 
     summarise_at(vars(starts_with("lag"), "EMS_Count"), mean, na.rm = TRUE) %>%
@@ -959,12 +951,64 @@ as.data.frame(study.panel.15) %>%
     kable_styling()
 ```
 
-```{r time explotory rush hour}
-ggplot(EMS_2010 %>%
+```{r time explotory - temporal correlation?}
+
+
+################Holidays################
+mondays <- #for refernece in the graphic
+  mutate(study.panel,
+         monday = ifelse(dotw == "Mon" & hour(interval60) == 1,
+                         interval60, 0)) %>%
+  filter(monday != 0) 
+
+thanksgivingEve   <- as.POSIXct("2020-11-26 01:00:00")
+xmasEve <- as.POSIXct("2019-12-24 01:00:00")
+laborDay <- as.POSIXct("2020-9-7 01:00:00")
+july4 <- as.POSIXct("2020-7-4 01:00:00")
+newYear <- as.POSIXct("2020-1-1 01:00:00")
+mardiGras <- as.POSIXct("2020-2-25 01:00:00")
+#Holidays
+
+##labor day
+##4th of July
+##new year's
+##saint patrick's 
+##cinco de mayo
+##Mardi gras
+##Memorial day
+##December to march: most cases of 0.06+BAC [https://www.washingtonpost.com/news/wonk/wp/2014/12/20/the-days-of-the-year-when-americans-are-most-drunk-visualized/]
+#[https://www.alcohol.org/guides/booziest-holidays/]
+
+st_drop_geometry(rbind(
+  mutate(EMS.Train, Legend = "Training"), 
+  mutate(EMS.Test, Legend = "Testing"))) %>%
+    group_by(Legend, interval60) %>% 
+      summarize(EMS_Count = sum(EMS_Count)) %>%
+      ungroup() %>% 
+      ggplot(aes(interval60, EMS_Count, colour = Legend)) + geom_line() +
+        scale_colour_manual(values = palette2) +
+        geom_vline(xintercept = thanksgivingEve, linetype = "dotted") +
+        geom_vline(xintercept = xmasEve, linetype = "dotted") +
+        geom_vline(xintercept = laborDay, linetype = "dotted") +
+        geom_vline(xintercept = july4, linetype = "dotted") +
+        geom_vline(xintercept = newYear, linetype = "dotted") +
+        geom_vline(xintercept = mardiGras, linetype = "dotted") +
+        geom_vline(data = mondays, aes(xintercept = monday)) +
+        labs(title="EMS Calls by week: 2018-2020",
+             subtitle="Dotted lines for Holidays", 
+             x="Day", y="Trip Count") +
+        plotTheme() + theme(panel.grid.major = element_blank())
+
+
+
+
+
+
+ggplot(EMS_18_20 %>%
          group_by(week) %>%
          tally())+
   geom_line(aes(x = week, y = n))+
-  labs(title="Figure 4.1: EMS trips, Santa Monica, 2010-2020 by week",
+  labs(title="EMS trips, Santa Monica, 2018-2020 by week",
        x="week of the year", 
        y="Number of trips")+
   plotTheme()
@@ -978,7 +1022,7 @@ ggplot(EMS_2010 %>%
        y="Number of trips")+
   plotTheme()
 
-ggplot(EMS_2020 %>%
+ggplot(EMS_18_20 %>%
          group_by(week) %>%
          tally())+
   geom_line(aes(x = week, y = n))+
@@ -987,45 +1031,45 @@ ggplot(EMS_2020 %>%
        y="Number of trips")+
   plotTheme()
 
-ggplot(EMS_2020 %>%
+ggplot(EMS_18_20 %>%
          group_by(dotw) %>%
          tally())+
   geom_line(aes(x = dotw, y = n, group = 1))+
-  labs(title="Figure 4.4: EMS trips, Santa Monica, 2020 by day of the week",
+  labs(title="EMS trips, Santa Monica, 2020 by day of the week",
        x="Day", 
        y="Number of trips")+
   plotTheme()
 
 #on a RANDOM Wednesday
-EMS_2020_W1 <- subset(EMS_2020, week==20 & dotw=="Wed")
-ggplot(EMS_2020_W1 %>%
+EMS_18_20_W1 <- subset(EMS_18_20, dotw=="Sat" | dotw=="Sun")
+ggplot(EMS_18_20_W1 %>%
          group_by(interval60) %>%
          tally())+
   geom_line(aes(x = interval60, y = n))+
-  labs(title="Figure 4.4: EMS trips, Santa Monica, 2020 by day of the week",
+  labs(title="FEMS trips, Santa Monica, 2020 by day of the week",
        x="Day", 
        y="Number of trips")+
   plotTheme()
 
-EMS_2020 %>% 
-         mutate(time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
-                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
+EMS_18_20 %>% 
+         mutate(time_of_day = case_when(hour(interval60) < 5 | hour(interval60) > 20 ~ "Overnight",
+                                 hour(interval60) >= 5 & hour(interval60) < 10 ~ "AM Rush",
                                  hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
-                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush"))%>%
+                                 hour(interval60) >= 15 & hour(interval60) <= 20 ~ "PM Rush"))%>%
          group_by(interval60, reporting_district, time_of_day) %>%
          tally()%>%
   group_by(time_of_day, reporting_district,)%>%
   summarize(mean_trips = mean(n))%>%
   ggplot()+
   geom_histogram(aes(mean_trips), binwidth = 1)+
-  labs(title="Figure 4.2: Mean Number of Hourly Trips Per reporting district. Philadelphia, Nov, 2018",
+  labs(title="Figure 4.2: Mean Number of Hourly Calls Per reporting district. Santa Monica, Nov, 2018",
        x="Number of trips", 
        y="Frequency")+
   facet_wrap(~time_of_day)+
   plotTheme()
 
 #hour of dotw
-ggplot(EMS_2020 %>% mutate(hour = hour(received)))+
+ggplot(EMS_18_20 %>% mutate(hour = hour(received)))+
      geom_freqpoly(aes(hour, color = dotw), binwidth = 1)+
   labs(title="Figure 4.3: EMS calls in Santa Monica, by day of the week, 2020",
        x="Hour", 
@@ -1033,7 +1077,7 @@ ggplot(EMS_2020 %>% mutate(hour = hour(received)))+
      plotTheme()
 
 
-ggplot(EMS_2020 %>% 
+ggplot(EMS_18_20 %>% 
          mutate(hour = hour(received),
                 weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday")))+
      geom_freqpoly(aes(hour, color = weekend), binwidth = 1)+
@@ -1113,6 +1157,12 @@ anim_save("ems_local", EMS_animation, duration=20, renderer = gifski_renderer())
 reg_temp <- 
   lm(EMS_Count ~  hour(interval60) + dotw + week + day, 
      data=EMS.Train)
+
+reg_temp2 <- 
+  lm(EMS_Count ~ ., data = EMS.Train %>%
+       dplyr::select(EMS_Count, interval60, Violent_Crime, uninsured, arthritis, bingeDrink, highBloodPressure, asthma, heartDisease, smoking, diabetes, obese, poorPhysicalHealth, stroke, median_age, pctPoverty, downtown.nn, week, dotw, lagHour, lag2Hours, lag3Hours, lag4Hours, lag12Hours, lag1day, day))
+
+summary(reg_temp2)  
 
 ##nesting
 ride.Test.weekNest <- 
