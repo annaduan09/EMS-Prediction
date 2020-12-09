@@ -724,7 +724,7 @@ study.panel.15 <-
          dotw = wday(interval15, label = TRUE))
 
 study.panel.2010 <- 
-  dat_net %>%
+  dat_net.2010 %>%
   mutate(EMS_Counter = 1) %>%
   right_join(study.panel.2010) %>% 
   group_by(interval60, uniqueID, longitude, latitude) %>% 
