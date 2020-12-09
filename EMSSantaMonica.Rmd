@@ -447,12 +447,6 @@ vars_net_tractData <- vars_net_centroid %>%
   dplyr::select(-NAME.y) %>%
   rename(tract = NAME.x) %>%
   st_as_sf() 
-  
-
-#ggplot() + #AD - used this to diagnose hte issue with the missing data/geometries
-#  geom_sf(data = vars_net_tractData, colour = "red", fill = "transparent") +
-#  geom_sf(data = tractData, colour = "blue", fill = "transparent") 
-
 
 # MAKE VARS_NET MAPPABLE
 vars_net.long <- 
@@ -826,15 +820,6 @@ final_net <-
 
 ```{r Time Exploration + Study Panels}
 
-#EMS_2010 <- EMS_2010_2020 %>%
-#  mutate(interval60 = floor_date(ymd_hms(received), unit = "hour"),
-#         interval15 = floor_date(ymd_hms(received), unit = "15 mins"),
-#         interval5 = floor_date(ymd_hms(received), unit = "5 mins"),
-#         interval1 = floor_date(ymd_hms(received), unit = "1 min"),
-#         week = week(interval60),
-#         dotw = wday(interval60, label=TRUE)) 
-
-#add census tracts
 library(dplyr)
 
 EMS_18_20 <- EMS_18_20 %>% 
@@ -843,81 +828,44 @@ EMS_18_20 <- EMS_18_20 %>%
           st_as_sf(., coords = c("longitude", "latitude"), crs = 4326) %>%
       st_transform(st_crs(fishnet))
 
-
-#EMS_2010 <- EMS_2010 %>% 
-#          filter(is.na(longitude) == FALSE &
-#                   is.na(latitude) == FALSE) %>%
-#          st_as_sf(., coords = c("longitude", "latitude"), crs = 4326) %>%
-#      st_transform(st_crs(fishnet))
-
 ACSTracts <- ACSTracts %>%
           st_transform(crs=4326) %>%
   st_as_sf() %>%
   st_transform(st_crs(fishnet))
 
 
-dat_census <- st_join(EMS_18_20,
-        ACSTracts,              #AD: should we join tractData instead?
+dat_net <- st_join(EMS_18_20,
+        final_net,            
         join=st_intersects,
               left = TRUE) %>%
   mutate(longitude = unlist(map(geometry, 1)),
          latitude = unlist(map(geometry, 2))) %>%
   as.data.frame() 
 
-
-dat_net <- st_join(EMS_18_20, fishnet, join=st_intersects,left = TRUE) %>% #AD: join final net instead?
-  mutate(longitude = unlist(map(geometry, 1)),
-         latitude = unlist(map(geometry, 2)))%>%
-  as.data.frame() 
-
-#dat_net.2010 <- st_join(EMS_2010,fishnet, join=st_intersects,left = TRUE) %>%
-#  mutate(longitude = unlist(map(geometry, 1)),
-#         latitude = unlist(map(geometry, 2)))%>%
-#  as.data.frame() 
-
 #STUDY.PANEL
 study.panel <- 
   expand.grid(interval60=unique(dat_net$interval60), 
               uniqueID = unique(dat_net$uniqueID))
-#%>%
-#  left_join(., dat_net %>%
-#              dplyr::select(uniqueID, longitude, latitude)%>% 
-#              distinct() %>%
-#              group_by(uniqueID) %>%
-#              slice(1))
-#nrow(study.panel)  
+
 
 study.panel.15 <- 
   expand.grid(interval15=unique(dat_net$interval15), 
               uniqueID = unique(dat_net$uniqueID)) 
-#%>%
-#  left_join(., dat_net %>%
-#              dplyr::select(uniqueID, longitude, latitude)%>% 
-#              distinct() %>%
-#              group_by(uniqueID) %>%
-#              slice(1))
+
 
 install.packages("vctrs")
 
-#study.panel.2010 <- 
-#  expand.grid(interval60=unique(dat_net.2010$interval60),
-#              uniqueID = unique(dat_net.2010$uniqueID)) %>%
-#  left_join(., dat_net.2010 %>%
-#              dplyr::select(uniqueID, longitude, latitude)%>% 
-#              distinct() %>%
-#              group_by(uniqueID) %>%
-#              slice(1))
 
 study.panel <- 
   dat_net %>%
   mutate(EMS_Counter = 1) %>%
   right_join(study.panel) %>% 
-  group_by(interval60, uniqueID, longitude, latitude) %>% 
+  group_by(interval60, uniqueID) %>% 
   summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
   left_join(weather.Panel, by = "interval60") %>%
-  ungroup() %>%
+ # ungroup() %>%
   filter(is.na(uniqueID) == FALSE) %>%
-  left_join(tractData, by = "") %>%
+  left_join(final_net, by = "uniqueID") %>%
   mutate(week = week(interval60),
          dotw = wday(interval60, label = TRUE))
 
@@ -925,24 +873,15 @@ study.panel.15 <-
   dat_net %>%
   mutate(EMS_Counter = 1) %>%
   right_join(study.panel.15) %>% 
-  group_by(interval15, uniqueID) %>% #, longitude, latitude) %>% 
+  group_by(interval15, uniqueID) %>% 
   summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
-  ungroup() %>%
+  left_join(weather.Panel, by = "interval60") %>%
+ # ungroup() %>%
   filter(is.na(uniqueID) == FALSE) %>%
+  left_join(final_net, by = "uniqueID") %>%
   mutate(week = week(interval15),
          dotw = wday(interval15, label = TRUE))
 
-#study.panel.2010 <- 
-#  dat_net.2010 %>%
-#  mutate(EMS_Counter = 1) %>%
-#  right_join(study.panel.2010) %>% 
-#  group_by(interval60, uniqueID, longitude, latitude) %>% 
-#  summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
-#  left_join(weather.Panel) %>%
-#  ungroup() %>%
-#  filter(is.na(uniqueID) == FALSE) %>%
-#  mutate(week = week(interval60),
-#         dotw = wday(interval60, label = TRUE))
 
 study.panel <- 
   study.panel %>% 
@@ -965,16 +904,25 @@ study.panel.15 <-
          lag60 = dplyr::lag(EMS_Count,4)) %>% 
    mutate(day = yday(interval15))
 
-#study.panel.2010 <- 
-#  study.panel.2010 %>% 
-#  arrange(uniqueID, interval60) %>% 
-#  mutate(lagHour = dplyr::lag(EMS_Count,1),
-#         lag2Hours = dplyr::lag(EMS_Count,2),
-#         lag3Hours = dplyr::lag(EMS_Count,3),
-#         lag4Hours = dplyr::lag(EMS_Count,4),
-#         lag12Hours = dplyr::lag(EMS_Count,12),
-#         lag1day = dplyr::lag(EMS_Count,24)) %>% 
-#   mutate(day = yday(interval60))
+
+#split data sets
+EMS.Train <- subset(study.panel,
+     interval60 >= as.POSIXct('2018-12-08') &
+     interval60 < as.POSIXct('2020-4-08')
+     )
+EMS.Test <- subset(study.panel,
+     interval60 >= as.POSIXct('2020-4-08') &
+     interval60 <= as.POSIXct('2020-12-08')
+     )
+
+
+
+
+
+
+
+
+
 
 
 as.data.frame(study.panel) %>%
@@ -1162,17 +1110,8 @@ anim_save("ems_local", EMS_animation, duration=20, renderer = gifski_renderer())
 
 ```{r temporal model}
 
-EMS.Train <- subset(study.panel.15,
-     interval15 >= as.POSIXct('2018-12-08') &
-     interval15 < as.POSIXct('2019-12-08')
-     )
-EMS.Test <- subset(study.panel.15,
-     interval15 >= as.POSIXct('2019-12-08') &
-     interval15 <= as.POSIXct('2020-12-08')
-     )
-
-reg_tem <- 
-  lm(EMS_Count ~  hour(interval15) + dotw + week + day, 
+reg_temp <- 
+  lm(EMS_Count ~  hour(interval60) + dotw + week + day, 
      data=EMS.Train)
 
 ##nesting
