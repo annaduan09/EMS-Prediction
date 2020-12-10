@@ -988,9 +988,6 @@ st_drop_geometry(rbind(
       ggplot(aes(interval60, EMS_Count, colour = Legend)) + geom_line() +
         scale_colour_manual(values = palette2) +
         geom_vline(xintercept = thanksgivingEve, linetype = "dotted") +
-        geom_vline(xintercept = xmasEve, linetype = "dotted") +
-        geom_vline(xintercept = laborDay, linetype = "dotted") +
-        geom_vline(xintercept = july4, linetype = "dotted") +
         geom_vline(xintercept = newYear, linetype = "dotted") +
         geom_vline(xintercept = mardiGras, linetype = "dotted") +
         geom_vline(data = mondays, aes(xintercept = monday)) +
@@ -1000,10 +997,7 @@ st_drop_geometry(rbind(
         plotTheme() + theme(panel.grid.major = element_blank())
 
 
-
-
-
-
+#other exploratory plots
 ggplot(EMS_18_20 %>%
          group_by(week) %>%
          tally())+
@@ -1144,7 +1138,7 @@ EMS_animation <-
     labs(title = "Figure 4.6: EMS calls for one week in May 2020",
          subtitle = "1 hour intervals: {current_frame}") +
     transition_manual(interval60) +
-    mapTheme
+    mapTheme()
 
 animate(EMS_animation, duration=20, renderer = gifski_renderer())
 
