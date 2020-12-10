@@ -11,6 +11,9 @@ output:
 ---
 #Motivation
 
+##COVID - 14 days after holidays, hospitalizations
+
+
 #Data and Methods
 ```{r load packages, message=FALSE, warning=FALSE, include=TRUE, results='hide', cache=TRUE}
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
@@ -232,7 +235,7 @@ ACS <-
 
 ################Fishnet################
 fishnet <- 
-  st_make_grid(ACS, cellsize = 500) %>%
+  st_make_grid(ACS, cellsize = 1000) %>% #LArgened
   st_sf()
 
 fishnet <- fishnet %>%
@@ -856,6 +859,7 @@ study.panel.15 <-
 install.packages("vctrs")
 
 
+
 study.panel <- 
   dat_net %>%
   mutate(EMS_Counter = 1) %>%
@@ -863,7 +867,7 @@ study.panel <-
   group_by(interval60, uniqueID) %>% 
   summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
   left_join(weather.Panel, by = "interval60") %>%
- # ungroup() %>%
+  ungroup() %>%
   filter(is.na(uniqueID) == FALSE) %>%
   left_join(final_net, by = "uniqueID") %>%
   mutate(week = week(interval60),
@@ -876,7 +880,7 @@ study.panel.15 <-
   group_by(interval15, uniqueID) %>% 
   summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
   left_join(weather.Panel, by = "interval60") %>%
- # ungroup() %>%
+  ungroup() %>%
   filter(is.na(uniqueID) == FALSE) %>%
   left_join(final_net, by = "uniqueID") %>%
   mutate(week = week(interval15),
@@ -973,15 +977,20 @@ mardiGras <- as.POSIXct("2020-2-25 01:00:00")
 ##4th of July
 ##new year's
 ##saint patrick's 
-##cinco de mayo
+##cinco de mayoun
 ##Mardi gras
 ##Memorial day
 ##December to march: most cases of 0.06+BAC [https://www.washingtonpost.com/news/wonk/wp/2014/12/20/the-days-of-the-year-when-americans-are-most-drunk-visualized/]
 #[https://www.alcohol.org/guides/booziest-holidays/]
 
-st_drop_geometry(rbind(
-  mutate(EMS.Train, Legend = "Training"), 
-  mutate(EMS.Test, Legend = "Testing"))) %>%
+t1 <- dplyr::select(ungroup(EMS.Train), -geometry)
+t2 <- dplyr::select(ungroup(EMS.Test), -geometry)
+
+readr::write_rds(t1, "./temp/t1.rds")
+
+rbind(
+  mutate(t1, Legend = "Training"), 
+  mutate(t2, Legend = "Testing")) %>%
     group_by(Legend, interval60) %>% 
       summarize(EMS_Count = sum(EMS_Count)) %>%
       ungroup() %>% 
