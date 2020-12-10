@@ -10,11 +10,16 @@ output:
     code_folding: hide
 ---
 #Motivation
+In the work of Emergency Medical Services (EMS), response time is everything. When responding to EMS calls for conditions such as cardiac arrest or stroke, minutes can be the difference between life and death. Over the past year, the COVID-19 pandemic has pushed the efficiency and function of EMS around the country to the limit. Surges in EMS demand have caused ambulance delays and shortages, the process of taking COVID-related protective measures such as donning personal protective equipment has increased response times, and in Los Angeles County, paramedics were ordered to [delay transporting cardiac arrest patients](https://www.latimes.com/california/story/2020-04-04/l-a-county-911-patients-hospital-coronavirus) to the hospital until 5 minutes after they are revived in order to optimize use of limited ambulance and emergency room capacity.
 
-##COVID - 14 days after holidays, hospitalizations
+In this environment, increasing the efficiency of ambulance response is critical to minimize the number of lives lost. To do this, we decided to use EMS call data to create a spatiotemporal predictive model for forecasting future calls. We decided to perform this analysis in Santa Monica, California because it has a wealth of EMS call data that reaches back to 2009 and is updated daily. As it is, Santa Monica dispatches ambulances from its network of fire stations and a private contractor as EMS calls are received. We propose to design an algorithm which forecasts the spatiotemporal patterns of EMS demand so that paramedics can arrive at predicted hotspots before emergencies occur. As Santa Monica's COVID cases climb, nearly filling its intensive care units and infecting ambulance and hospital staff, we believe that a more data-driven approach to ambulance dispatch can help reduce strain on the medical system.
 
 
 #Data and Methods
+For this model, we primarily use data from Santa Monica's Fire Calls for Service dataset, filtered for EMS calls. We additionally use tract-level demographic data from the American Community Survey (ACS),  environmental and city services data from Santa Monica's Open Data Portal, and tract-level health outcome data from the Center for Disease Control (CDC). For the temporal aspect of the model, we use weather data from the Iowa Environment Mesonet and city-wide COVID-19 case counts. 
+
+The idea behind our assortment of data is that the data from the ACS, CDC, and Santa Monica will inform the spatial element of our prediction, as we downloaded data about health, socioeconomic conditions, employment, and the physical environment, all of which are correlated to EMS calls and medical emergencies in the literature. Our use of EMS call, weather, and COVID-19 data contribute to the temporal part of this model, as they generate past experience about when EMS calls occur to train our model.
+
 ```{r load packages, message=FALSE, warning=FALSE, include=TRUE, results='hide', cache=TRUE}
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 options(scipen=10000000)
@@ -142,7 +147,16 @@ ymax = st_bbox(SM_Base)[[4]]
 
  
 ################Census Data################
-census_api_key("d9ebfd04caa0138647fbacd94c657cdecbf705e9", install = TRUE, overwrite = TRUE)
+census_api_key("d9ebfd04caa0138647fbacd94c657cdecbf705e9", install = FALSE, overwrite = TRUE)
+
+ACS <-
+  get_acs(geography = "tract", variables = c("B25002_003E", "B25001_001E", "B19013_001E", "B01001A_001E", "B01003_001E", "B07013_002E", "B07013_003E", "B06009_002E", 
+"B05003_008E", "B05003_019E", "B06012_002", "B21005_006E", "B21005_011E", 
+"B01001_006E", "B01001_007E", "B01001_008E", "B01001_009E","B01001_010E", "B01001_011E", "B01001_012E",
+"B01001_031E", "B01001_032E", "B01001_033E", "B01001_034E", "B01001_035E", "B01001_036E",
+"B01002_001E", "B01002_002E","B01002_003E"), year=2018, state=06, county=037, geometry=T, key="d9ebfd04caa0138647fbacd94c657cdecbf705e9") %>%
+    st_transform('EPSG:2225')
+
 #row 1: vacant, total housing units, mhhinc
 #row 2: white, population, renter occ, owner occ, #no HS degree
 #row 3: male adults, female adults, poverty level, youth unemployed (18-34, veteran), youth unemployed (non veteran)
@@ -152,13 +166,7 @@ census_api_key("d9ebfd04caa0138647fbacd94c657cdecbf705e9", install = TRUE, overw
 
 dd18_5 <- load_variables(year = 2018,dataset = "acs5", cache = TRUE) #AD:What's this for?
 
-ACS <-
-  get_acs(geography = "tract", variables = c("B25002_003E", "B25001_001E", "B19013_001E", "B01001A_001E", "B01003_001E", "B07013_002E", "B07013_003E", "B06009_002E", 
-"B05003_008E", "B05003_019E", "B06012_002", "B21005_006E", "B21005_011E", 
-"B01001_006E", "B01001_007E", "B01001_008E", "B01001_009E","B01001_010E", "B01001_011E", "B01001_012E",
-"B01001_031E", "B01001_032E", "B01001_033E", "B01001_034E", "B01001_035E", "B01001_036E",
-"B01002_001E", "B01002_002E","B01002_003E"), year=2018, state=06, county=037, geometry=T) %>%
-    st_transform('EPSG:2225')
+
 
 ACSTracts <-        
   ACS %>%
@@ -489,7 +497,8 @@ vars_net_tractData <-
       downtown.nn =
         nn_function(st_c(st_coid(vars_net)), st_c(st_coid(downtown)),1),
       intersection.nn = 
-        nn_function(st_c(st_coid(vars_net)), st_c(intersections),3))
+        nn_function(st_c(st_coid(vars_net)), st_c(intersections),3),
+      uniqueID = as.numeric(rownames(.)))
 
 vars_net.long.nn <- 
   dplyr::select(vars_net_tractData, ends_with(".nn")) %>%
@@ -506,37 +515,40 @@ mapList <- list()
 ```{r map EMS incidents, cache=TRUE}
 #EMS
 EMS <- read.socrata("https://data.smgov.net/Public-Safety/Fire-Calls-for-Service/5y3u-5db4?call_type_description=Emergency Medical Service (EMS)")%>% 
-dplyr::select (-census_block_2010_geoid, -census_tract_2010_geoid, -census_block_2000_geoid, -census_tract_2000_geoid)
+dplyr::select (-census_block_2010_geoid, -census_tract_2010_geoid, -census_block_2000_geoid, -census_tract_2000_geoid, -incident_number, -call_type_description, -location, -disposition)
 
 #time intervals
-EMS_int <- EMS %>%
+EMS <- EMS %>%
   mutate (interval = difftime(cleared,received,units = "min"))
 
-EMS_int$incident_date <- as.POSIXct(EMS_int$incident_date)
+EMS$incident_date <- as.POSIXct(EMS$incident_date)
 
-#Past 2 years of calls       #AD: I think it would be better for us to just work with the past 2 years instead of 10. We can use 10 to illustrate how reponse time is in general (it has increased in the past two years), but it'd be best to use just 2 years because I couldn't even generate a panel with the 10 years of data 
-EMS_18_20 <- subset(EMS_int,
+#2020 (for exploratory analysis visualizations)
+EMS_2020 <- subset(EMS,
+     incident_date >= as.POSIXct('2020-01-01') &
+     incident_date <= as.POSIXct('2020-12-10')
+     )
+#SF
+EMS_2020.sf <- na.omit(EMS_2020, cols=c("longitude", "latitude")) %>%  
+    st_as_sf(coords = c("longitude", "latitude"), crs = 4326, agr = "constant") %>%
+    st_transform('EPSG:2225')
+
+
+#2018 - 2020      
+EMS_18_20 <- subset(EMS,
      incident_date >= as.POSIXct('2018-12-08') &
      incident_date <= as.POSIXct('2020-12-08')
      )
-
-#make SF
+#SF
 EMS_18_20.sf <- na.omit(EMS_18_20, cols=c("longitude", "latitude")) %>%  
     st_as_sf(coords = c("longitude", "latitude"), crs = 4326, agr = "constant") %>%
     st_transform('EPSG:2225')
 
 
-##can't work for now
-#EMS_18_20.sf <-
-#  EMS_18_20.sf %>%
-#  mutate(CoastDist=(geosphere::dist2Line(p=st_coordinates(st_centroid(EMS_18_20.sf)),
-                                        #line=st_coordinates(coastline$osm_lines)[,1:2])*0.00062137)[,1],
-#         distWater = EMS_18_20.sf$CoastDist)
-
-#2010-2020 calls      
+#2010 - 2020     
 EMS_2010_2020 <- EMS_int %>%
   dplyr::filter(., grepl('201', incident_date)) 
-#make SF
+#SF
 EMS_2010_2020.sf <- na.omit(EMS_2010_2020, cols=c("longitude", "latitude")) %>%  
     st_as_sf(coords = c("longitude", "latitude"), crs = 4326, agr = "constant") %>%
     st_transform('EPSG:2225')
@@ -549,8 +561,6 @@ EMS_18_20_net.count <-
   aggregate(., fishnet, sum) %>%
   mutate(countEMS = replace_na(countEMS, 0),
          uniqueID = as.numeric(rownames(.)))
-         #,
-         #cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
 
 EMS_18_20_net.response <- 
   dplyr::select(EMS_18_20.sf) %>% 
@@ -560,13 +570,13 @@ EMS_18_20_net.response <-
          uniqueID = as.numeric(rownames(.)),
          cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
 
-EMS_18_20_net <- full_join(EMS_18_20_net.count, st_drop_geometry(EMS_18_20_net.response), by = c("uniqueID"))
+EMS_18_20_net <- full_join(EMS_18_20_net.count, st_drop_geometry(EMS_18_20_net.response), by = "uniqueID")
 
 ################Final Net################
 final_net <-
   inner_join(EMS_18_20_net, st_drop_geometry(vars_net_tractData), by="uniqueID")
 
-#EMS SINCE 2010
+#2010 - 2020
 EMS_net.count.emg <- 
   dplyr::select(EMS_2010_2020.sf) %>% 
   mutate(countEMS = 1) %>% 
@@ -579,60 +589,70 @@ EMS_net.response.emg <-
   mutate(responseTime = na.omit(EMS_2010_2020.sf$interval)) %>% 
   aggregate(., fishnet, mean) %>%
   mutate(responseTime = replace_na(responseTime, 0),
+         uniqueID = as.numeric(rownames(.)))
+
+ EMS_net.emg <- full_join(EMS_net.count.emg, st_drop_geometry(EMS_net.response.emg), by = "uniqueID")
+ 
+ #just for data viz: 
+ EMS_2020_net.response <- 
+  dplyr::select(EMS_2020.sf) %>% 
+  mutate(responseTime = na.omit(EMS_2020.sf$interval)) %>% 
+  aggregate(., fishnet, mean) %>%
+  mutate(responseTime = replace_na(responseTime, 0),
          uniqueID = as.numeric(rownames(.)),
          cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
 
- EMS_net.emg <- full_join(EMS_net.count.emg, st_drop_geometry(EMS_net.response.emg), by = "uniqueID")
 
-
-#Map 2018-2020 emergencies
-ggplot() +
+#Map of 2018-2020 and 2010-2020 emergencies
+grid.arrange(
+ ggplot() +
   geom_sf(data = EMS_18_20_net, aes(fill = countEMS, colour = countEMS)) +
-#  geom_sf(data = ACS, fill = "transparent", colour = "white") +
   scale_fill_viridis(option = "A", name = "Incidents Per Cell") +
   scale_colour_viridis(option = "A", name = "Incidents Per Cell") +
-  labs(title = "Observed EMS Calls Joined to Fishnet, 2020", subtitle = "Santa Monica, CA") +
-  mapTheme()
-
-#Map emergencies since 2010
+  labs(title = "2018-2020", subtitle = "Santa Monica, CA") +
+  mapTheme(),
 ggplot() +
   geom_sf(data = EMS_net.emg, aes(fill = countEMS, colour = countEMS)) +
   scale_fill_viridis(option = "A", name = "Incidents Per Cell") +
   scale_colour_viridis(option = "A", name = "Incidents Per Cell") +
-  labs(title = "Observed EMS Calls Joined to Fishnet, 2010-2020", subtitle = "Santa Monica, CA") +
-  mapTheme()
+  labs(title = "2010-2020", subtitle = "Santa Monica, CA") +
+  mapTheme(),
+top = "Observed EMS Calls over last 2 years vs 10 years",
+ncol = 2)
 
 
-#Map response time 2018-2020
+
+#Map of 2020 and 2010-2020 response times
+grid.arrange(
+  ggplot() +
+  geom_sf(data = EMS_2020_net.response, aes(fill = responseTime, colour = responseTime)) +
+  scale_fill_viridis(option = "A", name = "Minutes") +
+  scale_colour_viridis(option = "A", name = "Minutes") +
+  labs(title = "2020", subtitle = "Santa Monica, CA") +
+  mapTheme(),
   ggplot() +
   geom_sf(data = EMS_18_20_net.response, aes(fill = responseTime, colour = responseTime)) +
   scale_fill_viridis(option = "A", name = "Minutes") +
   scale_colour_viridis(option = "A", name = "Minutes") +
-  labs(title = "Average EMS Response Time Joined to Fishnet, 2020", subtitle = "Santa Monica, CA") +
-  mapTheme()
-
-#Map response time since 2010
-  ggplot() +
-  geom_sf(data = EMS_net.emg, aes(fill = responseTime, colour = responseTime)) +
-  scale_fill_viridis(option = "A", name = "Minutes") +
-  scale_colour_viridis(option = "A", name = "Minutes") +
-  labs(title = "Average EMS Response Time Joined to Fishnet, 2010-2020", subtitle = "Santa Monica, CA") +
-  mapTheme()  
+  labs(title = "2010-2020", subtitle = "Santa Monica, CA") +
+  mapTheme(),
+  ncol = 2,
+  top = "Average EMS Response Times over last year vs 10 years")
   
-#Call density - 2018-2020
+
+#Map of 2018-2020 and 2010-2020 call density 
+grid.arrange(
   ggplot() + 
   geom_sf(data = ACS, fill = "black") +
-  stat_density2d(data = data.frame(st_coordinates(EMS_18_20.sf)), 
+  stat_density2d(data = data.frame(st_coordinates(EMS_2020.sf)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.1, bins = 200, geom = 'polygon') +
   scale_fill_gradient(low = "yellow", high = "red", 
                       breaks=c(0.000000003,0.00000003),
                       labels=c("Minimum","Maximum"), name = "Density") +
   scale_alpha(range = c(0.0, 0.5), guide = FALSE) +
-  labs(title = "Density of EMS Incidents, 2018-2020") +
-  mapTheme()
-  
-#EMS call density - 2010-2020
+  labs(title = "2020") +
+  mapTheme(),
 ggplot() + 
   geom_sf(data = ACS, fill = "black") +
   stat_density2d(data = data.frame(st_coordinates(EMS_2010_2020.sf)), 
@@ -642,8 +662,10 @@ ggplot() +
                       breaks=c(0.000000003,0.00000003),
                       labels=c("Minimum","Maximum"), name = "Density") +
   scale_alpha(range = c(0.0, 0.5), guide = FALSE) +
-  labs(title = "Density of EMS Incidents, 2010-2020") +
-  mapTheme()
+  labs(title = "2010-2020") +
+  mapTheme(),
+  ncol = 2,
+  top = "Observed EMS Call Density over 2020 vs last 10 years")
 
 ```
 
@@ -652,7 +674,7 @@ ggplot() +
 ################EMS Call Histogram################
 ggplot(data = final_net, aes(x=countEMS)) +
   geom_histogram() +
-  labs(title = "Figure 3: Distribution of EMS Incidents, 2010-2019", subtitle = "Santa Monica, CA", x = "Fishnet Cells", y = "EMS Incidents Observed") +
+  labs(title = "Distribution of EMS Incidents, 2018-2020", subtitle = "Santa Monica, CA", x = "Fishnet Cells", y = "EMS Incidents Observed") +
   plotTheme()
 
 ################Weather Conditions################
@@ -692,43 +714,39 @@ EMS_18_20.sf <- EMS_18_20.sf %>%
          month = month(interval60),
          dotw = wday(interval60, label=TRUE)) 
 
+grid.arrange(
 ggplot(EMS_18_20 %>% mutate(hour = hour(interval60)))+
      geom_freqpoly(aes(hour, color = dotw), binwidth = 1)+
-  labs(title="EMS Calls in Santa Monica, by day of week, 2018-2020",
+  labs(title="Day of Week",
        x="Hour", 
        y="EMS Calls")+
-     plotTheme()
-
-
+     plotTheme(),
 ggplot(EMS_18_20 %>% mutate(hour = hour(interval60)))+
      geom_freqpoly(aes(month), binwidth = 1)+
-  labs(title="EMS Calls in Santa Monica by month, 2018-2020",
+  labs(title="Month",
        x="Month", 
        y="EMS Calls") +
-     plotTheme()
+     plotTheme(),
+ncol=2,
+top = "EMS Calls by Day of Week and Month, 2018-2020")
 
 ################Risk Factors Map################
- #get rid of NAME variable (census tract name), select preferred features
-vars_net_noname <- subset(vars_net_tractData, select = -c(uniqueID)) %>%
-  dplyr::select(harmfullanduse, markings, servicerequest, streetlights, Trash, Violent_Crime, median_age, population, medHHInc, pctVacant, pctWhite, pctRenterOcc, pctNoHS, pctPoverty, youthUnemploy, pctMaleYouth, violentCrime.nn, trash.nn, streetlightissue.nn, signandmarking.nn, socialservice.nn, harmfullu.nn, sport.nn)
-#make vars_net.long to use for mapping
-vars_net.long <-
-   gather(vars_net_noname, Variable, value, -geometry)
-#select features to show in multiple map
-vars_net.long.select <-     
-   gather(vars_net_noname, Variable, value, -geometry) %>%
-  dplyr::filter(Variable == "medHHInc" | Variable == "pctMaleYouth"| Variable == "pctNoHS"| Variable == "pctPoverty" | Variable == "markings" | Variable == "servicerequest" | Variable == "Trash" | Variable == "youthUnemploy")
+ #select preferred features
+vars_net_select <- vars_net_tractData %>%
+  dplyr::select(-uniqueID, -tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -pulmonaryDisease, -violentCrime.nn, -socialservice.nn, -intersection.nn, -diabetes)
 
-vars_net.long.select2 <-     
-   gather(vars_net_noname, Variable, value, -geometry) %>%
-  dplyr::filter(Variable != "medHHInc" & Variable != "pctMaleYouth"& Variable != "pctNoHS"& Variable != "pctPoverty" & Variable != "markings" & Variable != "servicerequest" & Variable != "Trash" & Variable != "youthUnemploy")
+#vars_net.long - for mapping
+vars_net.long <-
+   gather(vars_net_select, Variable, value, -geometry)
+
+
+#vars_net.long.select2 <-     
+#   gather(vars_net_noname, Variable, value, -geometry) %>%
+#  dplyr::filter(Variable != "medHHInc" & Variable != "pctMaleYouth"& Variable != "pctNoHS"& Variable != "pctPoverty" & #Variable != "markings" & Variable != "servicerequest" & Variable != "Trash" & Variable != "youthUnemploy")
 
 #make list of unique variables
-vars <- unique(vars_net.long.select$Variable)
+vars <- unique(vars_net.long$Variable)
 mapList <- list()
-
-vars2 <- unique(vars_net.long.select2$Variable)
-mapList2 <- list()
 
 #map risk factors
 for(i in vars){
@@ -740,23 +758,13 @@ for(i in vars){
       mapTheme() +
     theme(plot.title = element_text(size=10))}
 
-for(i in vars2){
-  mapList2[[i]] <- 
-    ggplot() +
-      geom_sf(data = filter(vars_net.long, Variable == i), aes(fill=value), colour=NA) +
-      scale_fill_viridis(option = "A", name="") +
-      labs(title=i) +
-      mapTheme() +
-    theme(plot.title = element_text(size=10))}
+do.call(grid.arrange,c(mapList, ncol = 5, top = "Risk Factors by Fishnet"))
 
-do.call(grid.arrange,c(mapList, ncol = 3, top = "Figure 4: Risk Factors by Fishnet"))
-
-do.call(grid.arrange,c(mapList2, ncol = 3, top = "Figure 4: Risk Factors by Fishnet"))
 
 ################Risk Factor Scatterplots########################
 correlation.long <-
   st_drop_geometry(final_net) %>%
-    dplyr::select(-uniqueID, -cvID, -tract) %>%
+    dplyr::select(-uniqueID, -tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -pulmonaryDisease, -violentCrime.nn, -socialservice.nn, -intersection.nn, -diabetes) %>%
     gather(Variable, Value, -countEMS) %>%
   mutate(Value = as.numeric(Value))
 
@@ -879,7 +887,7 @@ study.panel.15 <-
   right_join(study.panel.15) %>% 
   group_by(interval15, uniqueID) %>% 
   summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
-  left_join(weather.Panel, by = "interval60") %>%
+  left_join(weather.Panel, by = "interval15") %>%     #AD: weather.Panel doesn't have interval15, do you know how to make it?
   ungroup() %>%
   filter(is.na(uniqueID) == FALSE) %>%
   left_join(final_net, by = "uniqueID") %>%
@@ -929,7 +937,7 @@ as.data.frame(study.panel) %>%
                                                 "lag12Hours","lag1day", "lay2day")))%>%
     group_by(Variable) %>%  
     summarize(correlation = round(cor(Value, EMS_Count),2)) %>%
-    kable (caption="Table 1: Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
+    kable (caption="Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
     kable_styling()
 
 
@@ -943,16 +951,6 @@ as.data.frame(study.panel.15) %>%
     kable (caption="Table 2: Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
     kable_styling()
 
-#as.data.frame(study.panel.2010) %>%
-#    group_by(interval60) %>% 
-#    summarise_at(vars(starts_with("lag"), "EMS_Count"), mean, na.rm = TRUE) %>%
-#    gather(Variable, Value, -interval60, -EMS_Count) %>%
-#    mutate(Variable = factor(Variable, levels=c("lagHour","lag2Hours","lag3Hours","lag4Hours",
-#                                               "lag12Hours","lag1day")))%>%
-    group_by(Variable) %>%  
-    summarize(correlation = round(cor(Value, EMS_Count),2)) %>%
-    kable (caption="Time lag features and Correlation", col.names = c('Time lag', 'Corelation')) %>%
-    kable_styling()
 ```
 
 ```{r time explotory - temporal correlation?}
@@ -988,18 +986,20 @@ t2 <- dplyr::select(ungroup(EMS.Test), -geometry)
 
 readr::write_rds(t1, "./temp/t1.rds")
 
-rbind(
+holidayPlot <- rbind(
   mutate(t1, Legend = "Training"), 
   mutate(t2, Legend = "Testing")) %>%
     group_by(Legend, interval60) %>% 
       summarize(EMS_Count = sum(EMS_Count)) %>%
-      ungroup() %>% 
-      ggplot(aes(interval60, EMS_Count, colour = Legend)) + geom_line() +
+      ungroup() 
+
+holidayPlot %>%
+       ggplot(aes(interval60, EMS_Count, colour = Legend)) + geom_line() +
         scale_colour_manual(values = palette2) +
         geom_vline(xintercept = thanksgivingEve, linetype = "dotted") +
         geom_vline(xintercept = newYear, linetype = "dotted") +
         geom_vline(xintercept = mardiGras, linetype = "dotted") +
-        geom_vline(data = mondays, aes(xintercept = monday)) +
+       # geom_vline(data = mondays, aes(xintercept = monday)) +
         labs(title="EMS Calls by week: 2018-2020",
              subtitle="Dotted lines for Holidays", 
              x="Day", y="Trip Count") +
