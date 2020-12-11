@@ -311,6 +311,21 @@ weather.Panel <-
               wind_gust = max(gust)) %>%
     mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
 
+weather.Panel.15 <- 
+  riem_measures(station = "KSMO", date_start = "2020-01-01", date_end = "2020-12-08") %>%
+  dplyr::select(valid, tmpf, p01i, sknt, vsby, gust) %>%
+  replace(is.na(.), 0) %>%
+    mutate(interval15 = cut(weather.Panel.15$valid, breaks="15 min")) %>%
+    mutate(week = week(interval15),
+           dotw = wday(interval15, label=TRUE)) %>%
+    group_by(interval15) %>%
+    summarize(Temperature = max(tmpf),
+              Precipitation = sum(p01i),
+              Wind_Speed = max(sknt),
+              visibility = sum(vsby),
+              wind_gust = max(gust)) %>%
+    mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
+
 ################distance to downtown################
 
 zipcode <- st_read("https://opendata.arcgis.com/datasets/0b879034d6954177a1c3bac61039f204_0.geojson")%>%
@@ -904,9 +919,9 @@ study.panel.rd <-
   expand.grid(interval60=unique(EMS_18_20$interval60), 
               reporting_district= unique(EMS_18_20$reporting_district))
 
-#study.panel.15 <- 
-#  expand.grid(interval15=unique(dat_net$interval15), 
-#              uniqueID = unique(dat_net$uniqueID)) 
+study.panel.15 <- 
+  expand.grid(interval15=unique(dat_net$interval15), 
+              reporting_district = unique(EMS_2020$reporting_district)) 
 
 
 library(vctrs)
@@ -936,18 +951,18 @@ study.panel.rd <-
   mutate(week = week(interval60),
          dotw = wday(interval60, label = TRUE))
 
-#study.panel.15 <- 
-#  dat_net %>%
-#  mutate(EMS_Counter = 1) %>%
-#  right_join(study.panel.15) %>% 
-#  group_by(interval15, uniqueID) %>% 
-#  summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
-#  left_join(weather.Panel, by = "interval15") %>%     #AD: weather.Panel doesn't have interval15, do you know how to make it?
-#  ungroup() %>%
-#  filter(is.na(uniqueID) == FALSE) %>%
-#  left_join(final_net, by = "uniqueID") %>%
-#  mutate(week = week(interval15),
-#         dotw = wday(interval15, label = TRUE))
+weather.Panel.15$interval15 <- ymd_hms(weather.Panel.15$interval15)
+study.panel.15 <- 
+  EMS_2020 %>%
+  mutate(EMS_Counter = 1) %>%
+  right_join(EMS_2020) %>% 
+  group_by(interval15, reporting_district) %>% 
+  summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
+  left_join(weather.Panel.15, by = "interval15") %>%     #AD: weather.Panel doesn't have interval15, do you know how to make it?
+  ungroup() %>%
+  filter(is.na(reporting_district) == FALSE) %>%
+  mutate(week = week(interval15),
+         dotw = wday(interval15, label = TRUE))
 
 
 study.panel <- 
@@ -1017,14 +1032,58 @@ st_drop_geometry(rbind(
              x="Day", y="EMS Count") +
         plotTheme() + theme(panel.grid.major = element_blank())    
 
-#study.panel.15 <- 
-#  study.panel.15 %>% 
-#  arrange(uniqueID, interval15) %>% 
-#  mutate(lag15 = dplyr::lag(EMS_Count,1),
-#         lag30 = dplyr::lag(EMS_Count,2),
-#         lag45 = dplyr::lag(EMS_Count,3),
-#         lag60 = dplyr::lag(EMS_Count,4)) %>% 
-#   mutate(day = yday(interval15))
+study.panel.15 <- 
+  study.panel.15 %>% 
+  arrange(reporting_district, interval15) %>% 
+  mutate(lag15 = dplyr::lag(EMS_Count,1),
+         lag30 = dplyr::lag(EMS_Count,2),
+         lag45 = dplyr::lag(EMS_Count,3),
+         lag60 = dplyr::lag(EMS_Count,4)) %>% 
+   mutate(day = yday(interval15))
+
+cor_lag.15 <- na.omit(study.panel.15[, c("interval15","reporting_district","EMS_Count", "lag15")])
+plot(cor_lag.15$EMS_Count, cor_lag$lag15)
+cor.test(cor_lag.15$EMS_Count, cor_lag.15$lag15, method = c("pearson", "kendall", "spearman"))
+table(cor_lag.15$EMS_Count, cor_lag.15$lag15)
+
+corlag.emsct.15 <- na.omit(study.panel.15[c("interval15","EMS_Count")])%>%
+  mutate(ems_Count=EMS_Count)%>%
+  dplyr::select(-EMS_Count)%>%
+  subset(.,
+     interval15 >= as.POSIXct('2020-10-20 01:00:00 UTC') &
+     interval15 <= as.POSIXct('2020-12-01 01:00:00 UTC')
+     )
+  
+corlag.lag1ct.15 <- na.omit(study.panel.15[, c("interval15","lag15")])%>%
+  mutate(ems_Count=lag15)%>%
+  dplyr::select(-lag15)%>%
+  subset(.,
+     interval15 >= as.POSIXct('2020-10-20 01:00:00 UTC') &
+     interval15 <= as.POSIXct('2020-12-01 01:00:00 UTC')
+     )
+
+tg   <- as.POSIXct("2020-11-22 01:00:00 UTC")
+
+mondays.15 <- 
+  mutate(study.panel.15,
+         monday = ifelse(dotw == "Mon" & hour(interval15) == 1,
+                         interval15, 0)) %>%
+  filter(monday != 0) 
+
+rbind(
+  mutate(corlag.emsct.15, Legend = "EMS count"), 
+  mutate(corlag.lag1ct.15, Legend = "EMS 15 min lag count")) %>%
+    group_by(Legend, interval15) %>% 
+      summarize(ems_Count = sum(ems_Count)) %>%
+      ungroup() %>% 
+      ggplot(aes(interval15, ems_Count, colour = Legend)) + geom_line() +
+        scale_colour_manual(values = palette2) +
+        geom_vline(xintercept = tg, linetype = "dotted") +
+        geom_vline(data = mondays.15, aes(xintercept = monday)) +
+        labs(title="EMS trips by week",
+             subtitle="Dotted lines for Thanksgiving", 
+             x="Day", y="EMS Count") +
+        plotTheme() + theme(panel.grid.major = element_blank())   
 ```
 
 ```{r Time Exploration + Study Panels}
