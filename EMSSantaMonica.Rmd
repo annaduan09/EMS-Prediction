@@ -1007,6 +1007,7 @@ holidayPlot %>%
 
 
 #other exploratory plots
+grid.arrange(
 ggplot(EMS_18_20 %>%
          group_by(week) %>%
          tally())+
@@ -1014,34 +1015,18 @@ ggplot(EMS_18_20 %>%
   labs(title="EMS trips, Santa Monica, 2018-2020 by week",
        x="week of the year", 
        y="Number of trips")+
-  plotTheme()
-
-ggplot(EMS_2010 %>%
+  plotTheme(),
+ggplot(EMS_18_20 %>%
          group_by(dotw) %>%
          tally())+
   geom_line(aes(x = dotw, y = n, group = 1))+
   labs(title="Figure 4.2: EMS trips, Santa Monica, 2010-2020 by day of the week",
        x="Day", 
        y="Number of trips")+
-  plotTheme()
+  plotTheme(),
+ncol=2,
+top = "EMS Calls by Week and Day of Week")
 
-ggplot(EMS_18_20 %>%
-         group_by(week) %>%
-         tally())+
-  geom_line(aes(x = week, y = n))+
-  labs(title="Figure 4.3: EMS trips, Santa Monica, 2020 by week",
-       x="week of the year", 
-       y="Number of trips")+
-  plotTheme()
-
-ggplot(EMS_18_20 %>%
-         group_by(dotw) %>%
-         tally())+
-  geom_line(aes(x = dotw, y = n, group = 1))+
-  labs(title="EMS trips, Santa Monica, 2020 by day of the week",
-       x="Day", 
-       y="Number of trips")+
-  plotTheme()
 
 #on a RANDOM Wednesday
 EMS_18_20_W1 <- subset(EMS_18_20, dotw=="Sat" | dotw=="Sun")
@@ -1111,6 +1096,17 @@ ggplot()+
   facet_grid(weekend ~ time_of_day)+
   labs(title="Figure 4.5: EMS calls per hr by reporting district. Santa Monica, 2020")+
   mapTheme()
+
+
+study.panel.sample <- sample_n(study.panel, 50000, fac = "lagHour") %>%
+  na.omit() %>%
+  dplyr::select(lagHour, EMS_Count)
+
+ggplot(data = study.panel.sample, aes(x = lagHour, y=EMS_Count)) +
+  geom_point(size=2, shape=20) +
+  labs(title = "EMS Call 1 Hour Lag", subtitle = "Santa Monica, California") +
+  geom_smooth(method = "lm", se=F, colour = "green") +
+    plotTheme()
 
 
 ```
