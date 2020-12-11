@@ -106,7 +106,7 @@ q5 <- function(variable) {as.factor(ntile(variable, 5))}
 
 palette5 <- c("#eff3ff","#bdd7e7","#6baed6","#3182bd","#08519c")
 palette4 <- c("#D2FBD4","#92BCAB","#527D82","#123F5A")
-palette2 <- c("#6baed6","#08519c")
+palette2 <- c("#9c2108","#08519c")
 
 
 # NEAREST NEIGHBOR FUNCTION
@@ -135,8 +135,8 @@ nn_function <- function(measureFrom,measureTo,k) {
 ```{r wrangle data, cache=TRUE}
 
 ################Santa Monica Base################
-SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
-#SM_Base <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/SMTracts") %>%
+#SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
+SM_Base <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/SMTracts") %>%
   st_union() %>%
     st_transform('EPSG:2225')
 
@@ -322,22 +322,22 @@ filter(NAME == "Census Tract 7019.02, Los Angeles County, California") %>%
   st_centroid()
 
 #distance to water
-#coastline <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/coastline.geojson")%>%
-#    st_transform(st_crs(fishnet))
-coastline <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/coastline.geojson") %>%
-st_transform(st_crs(fishnet))
+coastline <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/coastline.geojson")%>%
+    st_transform(st_crs(fishnet))
+#coastline <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/coastline.geojson") %>%
+#st_transform(st_crs(fishnet))
 
 #distance to bars
-#bars <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/bar.geojson")%>%
-#    st_transform(st_crs(fishnet))
-bars <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/bar.geojson") %>%
-st_transform(st_crs(fishnet))
+bars <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/bar.geojson")%>%
+    st_transform(st_crs(fishnet))
+#bars <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/bar.geojson") %>%
+#st_transform(st_crs(fishnet))
 
 #intersection-not complete
-#intersections <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/intersection.geojson")%>%
-#    st_transform(st_crs(fishnet))
-intersections <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/intersection.geojson") %>%
-st_transform(st_crs(fishnet))
+intersections <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/intersection.geojson")%>%
+    st_transform(st_crs(fishnet))
+#intersections <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/intersection.geojson") %>%
+#st_transform(st_crs(fishnet))
 
 #311 calls
 call311 <- read.socrata("https://data.smgov.net/resource/tsas-mvez.json")
@@ -377,8 +377,8 @@ harmful_lu <- parcel %>%
     mutate(Legend = "harmfullanduse")
 
 #OSM
-#sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
-sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
+sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
+#sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
     st_transform(st_crs(fishnet))%>%
     mutate(Legend = "sport") 
 
@@ -544,9 +544,18 @@ EMS_18_20.sf <- na.omit(EMS_18_20, cols=c("longitude", "latitude")) %>%
     st_as_sf(coords = c("longitude", "latitude"), crs = 4326, agr = "constant") %>%
     st_transform('EPSG:2225')
 
+#2018-2019 (normal years)
+EMS_18_19 <- subset(EMS,
+     incident_date >= as.POSIXct('2018-12-08') &
+     incident_date <= as.POSIXct('2019-12-08')
+     )
+#SF
+EMS_18_19.sf <- na.omit(EMS_18_19, cols=c("longitude", "latitude")) %>%  
+    st_as_sf(coords = c("longitude", "latitude"), crs = 4326, agr = "constant") %>%
+    st_transform('EPSG:2225')
 
 #2010 - 2020     
-EMS_2010_2020 <- EMS_int %>%
+EMS_2010_2020 <- EMS %>%
   dplyr::filter(., grepl('201', incident_date)) 
 #SF
 EMS_2010_2020.sf <- na.omit(EMS_2010_2020, cols=c("longitude", "latitude")) %>%  
@@ -572,9 +581,28 @@ EMS_18_20_net.response <-
 
 EMS_18_20_net <- full_join(EMS_18_20_net.count, st_drop_geometry(EMS_18_20_net.response), by = "uniqueID")
 
+EMS_18_19_net.count <- 
+  dplyr::select(EMS_18_19.sf) %>% 
+  mutate(countEMS = 1) %>% 
+  aggregate(., fishnet, sum) %>%
+  mutate(countEMS = replace_na(countEMS, 0),
+         uniqueID = as.numeric(rownames(.)))
+
+EMS_18_19_net.response <- 
+  dplyr::select(EMS_18_19.sf) %>% 
+  mutate(responseTime = na.omit(EMS_18_19.sf$interval)) %>% 
+  aggregate(., fishnet, mean) %>%
+  mutate(responseTime = replace_na(responseTime, 0),
+         uniqueID = as.numeric(rownames(.)),
+         cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
+
+EMS_18_19_net <- full_join(EMS_18_19_net.count, st_drop_geometry(EMS_18_19_net.response), by = "uniqueID")
+
 ################Final Net################
 final_net <-
   inner_join(EMS_18_20_net, st_drop_geometry(vars_net_tractData), by="uniqueID")
+
+final_net_viz <- inner_join(EMS_18_19_net, st_drop_geometry(vars_net_tractData), by="uniqueID")
 
 #2010 - 2020
 EMS_net.count.emg <- 
@@ -623,21 +651,42 @@ ncol = 2)
 
 
 #Map of 2020 and 2010-2020 response times
-grid.arrange(
+resp_2020<-
   ggplot() +
   geom_sf(data = EMS_2020_net.response, aes(fill = responseTime, colour = responseTime)) +
   scale_fill_viridis(option = "A", name = "Minutes") +
   scale_colour_viridis(option = "A", name = "Minutes") +
   labs(title = "2020", subtitle = "Santa Monica, CA") +
-  mapTheme(),
+  mapTheme()
+resp_1820 <-
   ggplot() +
   geom_sf(data = EMS_18_20_net.response, aes(fill = responseTime, colour = responseTime)) +
   scale_fill_viridis(option = "A", name = "Minutes") +
   scale_colour_viridis(option = "A", name = "Minutes") +
-  labs(title = "2010-2020", subtitle = "Santa Monica, CA") +
-  mapTheme(),
-  ncol = 2,
-  top = "Average EMS Response Times over last year vs 10 years")
+  labs(title = "2018-2020", subtitle = "Santa Monica, CA") +
+  mapTheme()
+resp_1819 <-
+  ggplot() +
+  geom_sf(data = EMS_18_19_net.response, aes(fill = responseTime, colour = responseTime)) +
+  scale_fill_viridis(option = "A", name = "Minutes") +
+  scale_colour_viridis(option = "A", name = "Minutes") +
+  labs(title = "2018-2019", subtitle = "Santa Monica, CA") +
+  mapTheme()
+
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+
+mylegend<-g_legend(resp_2020)
+
+p3 <- grid.arrange(arrangeGrob(resp_2020 + theme(legend.position="none"),
+                               resp_1819 + theme(legend.position="none"),
+                               nrow=1),
+                   mylegend, nrow=2,heights=c(40, 40))
+#interesting! The response time in 2020 is actually lower than 2018-2019 on average.
+#The EMS is not that overwhelmed 
   
 
 #Map of 2018-2020 and 2010-2020 call density 
@@ -830,14 +879,7 @@ final_net <-
 ```
 
 ```{r Time Exploration + Study Panels}
-
 library(dplyr)
-
-EMS_18_20 <- EMS_18_20 %>% 
-          filter(is.na(longitude) == FALSE &
-                   is.na(latitude) == FALSE) %>%
-          st_as_sf(., coords = c("longitude", "latitude"), crs = 4326) %>%
-      st_transform(st_crs(fishnet))
 
 ACSTracts <- ACSTracts %>%
           st_transform(crs=4326) %>%
@@ -857,16 +899,17 @@ dat_net <- st_join(EMS_18_20,
 study.panel <- 
   expand.grid(interval60=unique(dat_net$interval60), 
               uniqueID = unique(dat_net$uniqueID))
+EMS_18_20.sample <- EMS_18_20[sample(nrow(EMS_18_20), 1500), ]
+study.panel.rd <-
+  expand.grid(interval60=unique(EMS_18_20$interval60), 
+              reporting_district= unique(EMS_18_20$reporting_district))
+
+#study.panel.15 <- 
+#  expand.grid(interval15=unique(dat_net$interval15), 
+#              uniqueID = unique(dat_net$uniqueID)) 
 
 
-study.panel.15 <- 
-  expand.grid(interval15=unique(dat_net$interval15), 
-              uniqueID = unique(dat_net$uniqueID)) 
-
-
-install.packages("vctrs")
-
-
+library(vctrs)
 
 study.panel <- 
   dat_net %>%
@@ -881,18 +924,30 @@ study.panel <-
   mutate(week = week(interval60),
          dotw = wday(interval60, label = TRUE))
 
-study.panel.15 <- 
-  dat_net %>%
+study.panel.rd <- 
+  EMS_18_20 %>%
   mutate(EMS_Counter = 1) %>%
-  right_join(study.panel.15) %>% 
-  group_by(interval15, uniqueID) %>% 
+  right_join(st_drop_geometry(EMS_18_20)) %>% 
+  group_by(interval60, reporting_district) %>% 
   summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
-  left_join(weather.Panel, by = "interval15") %>%     #AD: weather.Panel doesn't have interval15, do you know how to make it?
+  left_join(weather.Panel, by = "interval60") %>%
   ungroup() %>%
-  filter(is.na(uniqueID) == FALSE) %>%
-  left_join(final_net, by = "uniqueID") %>%
-  mutate(week = week(interval15),
-         dotw = wday(interval15, label = TRUE))
+  filter(is.na(reporting_district) == FALSE) %>%
+  mutate(week = week(interval60),
+         dotw = wday(interval60, label = TRUE))
+
+#study.panel.15 <- 
+#  dat_net %>%
+#  mutate(EMS_Counter = 1) %>%
+#  right_join(study.panel.15) %>% 
+#  group_by(interval15, uniqueID) %>% 
+#  summarize(EMS_Count = sum(EMS_Counter, na.rm=T)) %>%
+#  left_join(weather.Panel, by = "interval15") %>%     #AD: weather.Panel doesn't have interval15, do you know how to make it?
+#  ungroup() %>%
+#  filter(is.na(uniqueID) == FALSE) %>%
+#  left_join(final_net, by = "uniqueID") %>%
+#  mutate(week = week(interval15),
+#         dotw = wday(interval15, label = TRUE))
 
 
 study.panel <- 
@@ -906,17 +961,73 @@ study.panel <-
          lag1day = dplyr::lag(EMS_Count,24)) %>% 
    mutate(day = yday(interval60))
 
+study.panel.rd <- 
+  study.panel.rd %>% 
+  arrange(reporting_district, interval60) %>% 
+  mutate(lagHour = dplyr::lag(EMS_Count,1),
+         lag2Hours = dplyr::lag(EMS_Count,2),
+         lag3Hours = dplyr::lag(EMS_Count,3),
+         lag4Hours = dplyr::lag(EMS_Count,4),
+         lag12Hours = dplyr::lag(EMS_Count,12),
+         lag1day = dplyr::lag(EMS_Count,24)) %>% 
+   mutate(day = yday(interval60))
 
-study.panel.15 <- 
-  study.panel.15 %>% 
-  arrange(uniqueID, interval15) %>% 
-  mutate(lag15 = dplyr::lag(EMS_Count,1),
-         lag30 = dplyr::lag(EMS_Count,2),
-         lag45 = dplyr::lag(EMS_Count,3),
-         lag60 = dplyr::lag(EMS_Count,4)) %>% 
-   mutate(day = yday(interval15))
+cor_lag <- na.omit(study.panel.rd[, c("interval60","reporting_district","EMS_Count", "lagHour")])
+plot(cor_lag$EMS_Count, cor_lag$lagHour)
+cor.test(cor_lag$EMS_Count, cor_lag$lagHour, method = c("pearson", "kendall", "spearman"))
+table(cor_lag$EMS_Count, cor_lag$lagHour)
 
+corlag.emsct <- na.omit(study.panel.rd[c(-1), c("interval60","EMS_Count")])%>%
+  mutate(ems_Count=EMS_Count)%>%
+  dplyr::select(-EMS_Count)%>%
+  subset(.,
+     interval60 >= as.POSIXct('2019-11-10 01:00:00 UTC') &
+     interval60 <= as.POSIXct('2019-12-29 01:00:00 UTC')
+     )
+  
+corlag.lag1ct <- na.omit(study.panel.rd[, c("interval60","lagHour")])%>%
+  mutate(ems_Count=lagHour)%>%
+  dplyr::select(-lagHour)%>%
+  subset(.,
+     interval60 >= as.POSIXct('2019-11-10 01:00:00 UTC') &
+     interval60 <= as.POSIXct('2019-12-29 01:00:00 UTC')
+     )
 
+tg   <- as.POSIXct("2019-11-22 01:00:00 UTC")
+xmas <- as.POSIXct("2019-12-24 01:00:00 UTC")
+mondays <- 
+  mutate(study.panel.rd,
+         monday = ifelse(dotw == "Mon" & hour(interval60) == 1,
+                         interval60, 0)) %>%
+  filter(monday != 0) 
+
+st_drop_geometry(rbind(
+  mutate(corlag.emsct, Legend = "EMS count"), 
+  mutate(corlag.lag1ct, Legend = "EMS 1-hour lag count"))) %>%
+    group_by(Legend, interval60) %>% 
+      summarize(ems_Count = sum(ems_Count)) %>%
+      ungroup() %>% 
+      ggplot(aes(interval60, ems_Count, colour = Legend)) + geom_line() +
+        scale_colour_manual(values = palette2) +
+        geom_vline(xintercept = tg, linetype = "dotted") +
+        geom_vline(xintercept = xmas, linetype = "dotted") +
+        geom_vline(data = mondays, aes(xintercept = monday)) +
+        labs(title="EMS trips by week",
+             subtitle="Dotted lines for Thanksgiving & Christmas", 
+             x="Day", y="EMS Count") +
+        plotTheme() + theme(panel.grid.major = element_blank())    
+
+#study.panel.15 <- 
+#  study.panel.15 %>% 
+#  arrange(uniqueID, interval15) %>% 
+#  mutate(lag15 = dplyr::lag(EMS_Count,1),
+#         lag30 = dplyr::lag(EMS_Count,2),
+#         lag45 = dplyr::lag(EMS_Count,3),
+#         lag60 = dplyr::lag(EMS_Count,4)) %>% 
+#   mutate(day = yday(interval15))
+```
+
+```{r Time Exploration + Study Panels}
 #split data sets
 EMS.Train <- subset(study.panel,
      interval60 >= as.POSIXct('2018-12-08') &
@@ -941,15 +1052,15 @@ as.data.frame(study.panel) %>%
     kable_styling()
 
 
-as.data.frame(study.panel.15) %>%
-    group_by(interval15) %>% 
-    summarise_at(vars(starts_with("lag"), "EMS_Count"), mean, na.rm = TRUE) %>%
-    gather(Variable, Value, -interval15, -EMS_Count) %>%
-    mutate(Variable = factor(Variable, levels=c("lag15","lag30","lag45","lag60")))%>%
-    group_by(Variable) %>%  
-    summarize(correlation = round(cor(Value, EMS_Count),2)) %>%
-    kable (caption="Table 2: Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
-    kable_styling()
+#as.data.frame(study.panel.15) %>%
+#    group_by(interval15) %>% 
+#    summarise_at(vars(starts_with("lag"), "EMS_Count"), mean, na.rm = TRUE) %>%
+#    gather(Variable, Value, -interval15, -EMS_Count) %>%
+#    mutate(Variable = factor(Variable, levels=c("lag15","lag30","lag45","lag60")))%>%
+#    group_by(Variable) %>%  
+#    summarize(correlation = round(cor(Value, EMS_Count),2)) %>%
+#    kable (caption="Table 2: Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
+#    kable_styling()
 
 ```
 
