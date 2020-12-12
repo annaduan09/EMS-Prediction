@@ -1327,50 +1327,6 @@ anim_save("ems_local", EMS_animation, duration=20, renderer = gifski_renderer())
 # Temporal Validation
 ```{r temporal model}
 
-trainA <- c(1, 2, 3, 4, 5,3,2,1)
-trainB <- c(6,7,8,9,10,34,56,78)
-trainC <- c(34,56,78,90,87,65,54,43)
-
-trainD <- c(9,8,7,6,5,1,2,3)
-trainE <- c(5,6,7,8,9,4,6,2)
-
-
-test.train <- data.frame(trainA, trainB, trainC, trainD, trainE)
-test.test <- data.frame(trainA, trainB, trainC, trainD, trainE)
-
-reg_test <- 
-  lm(trainA ~  trainB + trainC + trainD + trainE,
-     data=test.train)
-
-
-summary(reg_test)  
-
-
-##nesting
-test.test.trainBNest <- 
-  as.data.frame(test.test) %>%
-  nest(-trainB)
-
-
-test.test.trainBNest
-
-
-
-model_pred <- function(dat, fit){
-   pred <- predict(fit, newdata = dat)}
-
-
-
-trainB_predictions <- 
-  test.test.trainBNest %>% 
-    mutate(Time_Space_FE_timeLags = map(.x = data, fit = reg_test, .f = model_pred)) %>% 
-    gather(Regression, Prediction, -data, -trainB) %>%
-    mutate(Observed = map(data, pull, trainA),
-           Absolute_Error = map2(Observed, Prediction,  ~ abs(.x - .y)),
-           MAE = map_dbl(Absolute_Error, mean, na.rm = TRUE),
-           sd_AE = map_dbl(Absolute_Error, sd, na.rm = TRUE))
-
-################
 EMS.Train <- EMS.Train %>%
   rename(Week = week)
 
@@ -1380,11 +1336,6 @@ EMS.Test <- EMS.Test %>%
 reg_temp <- 
   lm(EMS_Count ~  hour(interval60) + dotw + Week + day, 
      data=EMS.Train)
-
-
-#reg_temp2 <- 
-#  lm(EMS_Count ~ ., data = EMS.Train %>%
-#       dplyr::select(EMS_Count, interval60, Violent_Crime, uninsured, arthritis, bingeDrink, #highBloodPressure, asthma, heartDisease, smoking, diabetes, obese, poorPhysicalHealth, stroke, #median_age, pctPoverty, downtown.nn, Week, dotw, lagHour, lag2Hours, lag3Hours, lag4Hours, lag12Hours, #lag1day, day))
 
 summary(reg_temp)  
 
@@ -1405,7 +1356,7 @@ model_pred <- function(dat, fit){
 
 week_predictions <- 
   EMS.Test.weekNest %>% 
-    mutate(Time_Space_FE_timeLags = map(.x = data, fit = reg_temp, .f = model_pred)) %>% 
+    mutate(Time_Space_FE_timeLags = map(.x = data, fit = reg_temp, .f = model_pred)) %>%  #AD: not working.
     gather(Regression, Prediction, -data, -Week) %>%
     mutate(Observed = map(data, pull, EMS_Count),
            Absolute_Error = map2(Observed, Prediction,  ~ abs(.x - .y)),
