@@ -1138,16 +1138,25 @@ study.panel.rd <-
          lag1day = dplyr::lag(EMS_Count,24)) %>% 
    mutate(day = yday(interval60))
 
-study.panel.net <- dat_net %>%
-  dplyr::select(reporting_district, station, interval15, tract, servicerequest, Trash, Violent_Crime, ZIPCODE, EMS.isSig.dist, uniqueID) %>%
-  merge(x=study.panel, y=., by.x = "uniqueID", by.y = "uniqueID", all.x = TRUE) %>%
-      filter(is.na(uniqueID) == FALSE)
+#r connect net data to EMS
+EMS_netData <- st_join(EMS_18_20.sf, final_net %>%
+                         dplyr::select(uniqueID, tract, countEMS, servicerequest, Trash, Violent_Crime, medHHInc, bar.nn, downtown.nn, EMS.isSig.dist), 
+                       join = st_intersects,
+                       left = TRUE) %>%
+  as.data.frame() %>%
+  select(-geometry)
+#final panel
+study.panel.final <- 
+  expand.grid(interval60=unique(EMS_netData$interval60), 
+              uniqueID = unique(EMS_netData$uniqueID)) %>%
+  left_join(., EMS_netData %>%
+              select(uniqueID, tract, countEMS, servicerequest, Trash, Violent_Crime, medHHInc, bar.nn, downtown.nn, EMS.isSig.dist) %>%
+              distinct() %>%
+              group_by(uniqueID) %>%
+              slice(1))
 
-
-
-
-study.panel.net <- 
-  study.panel.net %>% 
+study.panel.final <- 
+  study.panel.final %>% 
   arrange(uniqueID, interval60) %>% 
   mutate(lagHour = dplyr::lag(EMS_Count,1),
          lag2Hours = dplyr::lag(EMS_Count,2),
@@ -1258,6 +1267,10 @@ rbind(
              x="Day", y="EMS Count") +
         plotTheme() + theme(panel.grid.major = element_blank())   
 ``` 
+
+
+
+
 
 Table XX shows us in more detail correlations between EMS calls and lags. We see that the strongest correlation is with 30 and 45 minute lag. 
 ```{r Time Lag Tables}
