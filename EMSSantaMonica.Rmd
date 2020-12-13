@@ -133,8 +133,8 @@ The idea behind our assortment of data is that the data from the ACS, CDC, and S
 ```{r wrangle data, cache=TRUE}
 
 ################Santa Monica Base################
-#SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
-SM_Base <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/SMTracts") %>%
+SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
+#SM_Base <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/SMTracts") %>%
   st_union() %>%
     st_transform('EPSG:2225')
 
@@ -309,23 +309,6 @@ weather.Panel <-
               wind_gust = max(gust)) %>%
     mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
 
-weather.Panel.15 <- 
-  riem_measures(station = "KSMO", date_start = "2018-01-01", date_end = "2020-12-08") %>%
-  dplyr::select(valid, tmpf, p01i, sknt, vsby, gust) %>%
-  replace(is.na(.), 0)
-weather.Panel.15 %>%
-    mutate(interval15 = cut(weather.Panel.15$valid, breaks="15 min")) %>%
-    mutate(week = week(interval15),
-           dotw = wday(interval15, label=TRUE)) %>%
-    group_by(interval15) %>%
-    summarize(Temperature = max(tmpf),
-              Precipitation = sum(p01i),
-              Wind_Speed = max(sknt),
-              visibility = sum(vsby),
-              wind_gust = max(gust)) %>%
-    mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
-
-#attempt 2
 weather.Panel.15 <-
   riem_measures(station = "KSMO", date_start = "2020-01-01", date_end = "2020-12-08") %>%
   dplyr::select(valid, tmpf, p01i, sknt, vsby, gust) %>%
@@ -353,20 +336,14 @@ downtown <- ACS %>%
 filter(NAME == "Census Tract 7019.02, Los Angeles County, California") %>%
   st_centroid()
 
-#distance to water
-#coastline <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/coastline.geojson")%>%
-#    st_transform(st_crs(fishnet))
-#coastline <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/coastline.geojson") %>%
-#st_transform(st_crs(fishnet))
-
 #distance to bars
-bars <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/bar.geojson")%>%
-#bars <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/bar.geojson") %>%
+#bars <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/bar.geojson")%>%
+bars <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/bar.geojson") %>%
 st_transform(st_crs(fishnet))
 
 #intersection-not complete
-intersections <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/intersection.geojson")%>%
-#intersections <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/intersection.geojson") %>%
+#intersections <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/intersection.geojson")%>%
+intersections <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/intersection.geojson") %>%
 st_transform(st_crs(fishnet))
 
 #311 calls
@@ -407,15 +384,10 @@ harmful_lu <- parcel %>%
     mutate(Legend = "harmfullanduse")
 
 #OSM
-sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
-#sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
+#sport <- st_read("E:/Upenn/CPLN508/final project/EMS-Prediction/sport.geojson") %>%
+sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
     st_transform(st_crs(fishnet))%>%
     mutate(Legend = "sport") 
-
-
-#neighborhood orgs (http://www.city-data.com/nbmaps/neigh-Santa-Monica-California.html)
-#neighborhood <- st_read("https://opendata.arcgis.com/datasets/63595d717c494165b3c6b3b85c2463ae_0.geojson")%>%
-#      st_transform(st_crs(fishnet))  #AD: some of these overlap, and some parts of fishnet aren't covered. I will try to find neighborhood boundaries.
 
 ACS$row <- 1:nrow(ACS)
 
@@ -541,7 +513,7 @@ mapList <- list()
 
 
 # Exploratory Analysis
-To begin our analysis, we wrangle EMS call data to understand the spatial trends in EMS call and response over time. 
+To begin our analysis, we wrangle EMS call data to understand the spatial trends in EMS call and response over time.
 ```{r EMS incidents, cache=TRUE}
 #EMS
 EMS <- read.socrata("https://data.smgov.net/Public-Safety/Fire-Calls-for-Service/5y3u-5db4?call_type_description=Emergency Medical Service (EMS)")%>% 
@@ -735,7 +707,7 @@ mylegend<-g_legend(resp_2020)
 p3 <- grid.arrange(arrangeGrob(resp_2020 + theme(legend.position="none"),
                                resp_1020 + theme(legend.position="none"),
                                nrow=1),
-                   mylegend, nrow=2,heights=c(40, 40))
+                   mylegend, nrow=2,heights=c(40, 40), top = "Observed EMS Response Times, 2010-2020")
 #interesting! The response time in 2020 is actually lower than 2018-2019 on average.
 #The EMS is not that overwhelmed 
 #AD - Yeah i noticed! I read a study this morning about EMS calls during the pandemic and they found that in some cases people were less likely to call EMS due to fear of catching covid at the hospital. 
@@ -744,10 +716,9 @@ p3 <- grid.arrange(arrangeGrob(resp_2020 + theme(legend.position="none"),
 To better understand the spatial distribution of EMS calls, we also analyze the spatial distribution of some of its risk factors. We use health factors related to health emergencies such as past incidence of stroke, heart disease, and high blood pressure. We also use demographic features related to groups at high risk of relying on emergency medical services as their primary healthcare including poverty rate, unemployment, and percent white. In addition, we use environmental features related to poor community health including harmful land use, street light issues, and municipal service requests. Finally, we map violent crime incidents, perhaps the most direct proxy for EMS demand. 
 
 Several patterns emerged: 
-1. The distribution of uninsured residents, asthma, older women with access to basic clinical services, smoking, poor mental health, obesity, stroke, median household income, and poverty point to an area in the middle of the city that appears to be highly economically disadvantaged and in poor health. Surprisingly though, these areas are not in the hotspots for EMS calls.
 
-2. Service requests, trash complains, violent crime, binge drinking, and bars are clustered in the downtown region, the biggest hotspot for EMS calls.
-
+1. The distribution of uninsured residents, asthma, older women with access to basic clinical services, smoking, poor mental health, obesity, stroke, median household income, and poverty point to an area in the middle of the city that appears to be highly economically disadvantaged and in poor health. Surprisingly though, these areas are not in the hotspots for EMS calls.  
+2. Service requests, trash complains, violent crime, binge drinking, and bars are clustered in the downtown region, the biggest hotspot for EMS calls.  
 3. Cancer, heart disease, stroke, and median age surprisingly do not exhibit clear spatial patterns and do not appear correlated with EMS calls.
 
 ```{r risk factor maps}
@@ -804,11 +775,42 @@ ggplot(correlation.long, aes(Value, countEMS)) +
 
 What about the temporal risk factors for EMS incidents?
 ```{r exploratory}
-################EMS Call Histogram################
-ggplot(data = final_net, aes(x=countEMS)) +
-  geom_histogram() +
-  labs(title = "Distribution of EMS Incidents, 2018-2020", subtitle = "Santa Monica, CA", x = "Fishnet Cells", y = "EMS Incidents Observed") +
+
+EMS_2020 %>%
+  mutate(count = 1) %>%
+    group_by(incident_date) %>% 
+      summarize(EMS_Count = sum(count)) %>%
+      ungroup() %>% 
+      ggplot(aes(incident_date, EMS_Count)) + 
+  geom_area(fill = "pink") +
+  geom_line(color = "pink") +
+        labs(title="EMS trips, 2020",
+             subtitle="Santa Monica, CA", 
+             x="Day", y="EMS Count") +
+        plotTheme() + theme(panel.grid.major = element_blank())   
+
+################Covid################
+covid <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/coronavirus.csv") %>%
+  filter(place == "Santa Monica") %>%
+  st_as_sf(coords = c("x", "y"), crs = 4326, agr = "constant") %>%
+    st_transform('EPSG:2225') %>%
+    mutate(date = as.POSIXct(date)) %>%
+  dplyr::select(date, confirmed_cases, geometry) %>%
+  rename(Case_Count = confirmed_cases) %>%
+  mutate(day = day(date),
+         week = week(date),
+         month = month(date),
+         Case_Count = as.numeric(Case_Count))
+
+
+ggplot(covid, aes(date,Case_Count)) + 
+  geom_area(fill = "pink") +
+  geom_line(color = "pink") +
+  labs(title = "Covid-19 Cases, 2020", subtitle = "Santa Monica, CA", x="Date", y="Case Count") + 
   plotTheme()
+
+
+
 
 ################Weather Conditions################
 library(ggplot2)
@@ -879,6 +881,14 @@ top = "EMS Calls by Day of Week and Month, 2018-2020")
 
 The two hotspots are in Downtown and Mid City. Downtown: beach, Santa Monica pier, muscle beach: likely accidents from physical activity/overall high population density/nightlife
 ```{r Local Moran's: Identify hotspots + add isSig features}
+
+################EMS Call Histogram################
+ggplot(data = final_net, aes(x=countEMS)) +
+  geom_histogram() +
+  labs(title = "Distribution of EMS Incidents, 2018-2020", subtitle = "Santa Monica, CA", x = "Fishnet Cells", y = "EMS Incidents Observed") +
+  plotTheme()
+
+
 ##Prepare for moran's
 library(spdep)
 final_net.nb <- poly2nb(as_Spatial(final_net), queen=TRUE) 
@@ -1065,9 +1075,9 @@ rbind(
       ungroup() %>% 
       ggplot(aes(interval60, ems_Count, colour = Legend)) + geom_line() +
         scale_colour_manual(values = palette2) +
-        geom_vline(xintercept = tg, linetype = "dotted") +
-        geom_vline(xintercept = xmas, linetype = "dotted") +
-        geom_vline(data = mondays, aes(xintercept = monday)) +
+      #  geom_vline(xintercept = tg, linetype = "dotted") +
+      #  geom_vline(xintercept = xmas, linetype = "dotted") +
+      #  geom_vline(data = mondays, aes(xintercept = monday)) +
         labs(title="EMS trips by week",
              subtitle="Dotted lines for Thanksgiving & Christmas", 
              x="Day", y="EMS Count") +
