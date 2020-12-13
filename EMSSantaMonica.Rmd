@@ -455,6 +455,7 @@ vars_net %>%
 vars_net_tractData <- vars_net_centroid %>% 
   dplyr::select(uniqueID) %>%
   st_join(., tractData) %>%
+  st_join(., zipcode) %>%
   st_drop_geometry() %>%
   left_join(vars_net,.,by="uniqueID") %>%
   dplyr::select(-NAME.y) %>%
@@ -679,8 +680,6 @@ ggplot() +
 What about response times? We would expect that due to the pandemic, response times may be slower due to increased demand. However, it turns out that average response times in 2020 were lower than the average response time over the past 10 years. This may indicate higher efficiency, however it's also possible that the fear of COVID-19 infection is [deterring people](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7318958/) from calling ambulances for non-COVID emergencies such as heart attacks. That is not good. Additionally, while response times have decreased, they are still relatively high: in 2020, the mean response time was 29 minutes, more than 6x the length of the standard set by the National Fire Protection Association.
 ```{r EMS Response Time Map}
 #Map of 2020 and 2010-2020 response times
-
-
 resp_2020<-
   ggplot() +
   geom_sf(data = EMS_2020_net.response, aes(fill = responseTime, colour = responseTime)) +
@@ -718,13 +717,13 @@ To better understand the spatial distribution of EMS calls, we also analyze the 
 Several patterns emerged: 
 
 1. The distribution of uninsured residents, asthma, older women with access to basic clinical services, smoking, poor mental health, obesity, stroke, median household income, and poverty point to an area in the middle of the city that appears to be highly economically disadvantaged and in poor health. Surprisingly though, these areas are not in the hotspots for EMS calls.  
-2. Service requests, trash complains, violent crime, binge drinking, and bars are clustered in the downtown region, the biggest hotspot for EMS calls.  
+2. Service requests, trash complaints, violent crime, binge drinking, and bars are clustered in the downtown region, the biggest hotspot for EMS calls.  
 3. Cancer, heart disease, stroke, and median age surprisingly do not exhibit clear spatial patterns and do not appear correlated with EMS calls.
 
 ```{r risk factor maps}
 #select features
 vars_net_select <- vars_net_tractData %>%
-  dplyr::select(-uniqueID, -tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -pulmonaryDisease, -violentCrime.nn, -socialservice.nn, -intersection.nn, -diabetes, -trash.nn)
+  dplyr::select(-uniqueID, -tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -pulmonaryDisease, -violentCrime.nn, -socialservice.nn, -intersection.nn, -diabetes, -trash.nn, -ZIPCODE)
 
 #vars_net.long - for mapping
 vars_net.long <-
@@ -748,13 +747,13 @@ do.call(grid.arrange,c(mapList, ncol = 5, top = "Risk Factors by Fishnet"))
 ```
 
 
-To verify these correlations with EMS calls, we plot EMS calls as a function of these risk factors. The results verify our suspicions: the most correlated spatial risk factors are violent crime, 311 service requests, downtown, trash complaints, distance to nearest bar, binge ranking, median income, and poverty.
+To verify these correlations with EMS calls, we plot EMS calls as a function of these risk factors. The results verify our suspicions: the most correlated spatial risk factors are violent crime, 311 service requests, downtown, trash complaints, distance to nearest bar, binge drinking, median income, and poverty.
 
 ```{r risk factor scatterplots}
 ################Risk Factor Scatterplots########################
 correlation.long <-
   st_drop_geometry(final_net) %>%
-    dplyr::select(-uniqueID, -tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -pulmonaryDisease, -violentCrime.nn, -socialservice.nn, -intersection.nn, -diabetes, -trash.nn) %>%
+    dplyr::select(-uniqueID, -ZIPCODE, -tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -pulmonaryDisease, -violentCrime.nn, -socialservice.nn, -intersection.nn, -diabetes, -trash.nn) %>%
     gather(Variable, Value, -countEMS) %>%
   mutate(Value = as.numeric(Value))
 
@@ -795,19 +794,28 @@ covid <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/coronavirus.cs
   st_as_sf(coords = c("x", "y"), crs = 4326, agr = "constant") %>%
     st_transform('EPSG:2225') %>%
     mutate(date = as.POSIXct(date)) %>%
-  dplyr::select(date, confirmed_cases, new_cases, geometry) %>%
+  dplyr::select(date, confirmed_cases, new_cases, two_week_lag, geometry) %>%
   rename(Case_Count = confirmed_cases) %>%
   mutate(day = day(date),
          week = week(date),
          month = month(date),
          Case_Count = as.numeric(Case_Count),
-         new_cases = as.numeric(new_cases))
-
+         new_cases = as.numeric(new_cases),
+         two_week_lag = as.numeric(two_week_lag))
+grid.arrange(
 ggplot(covid, aes(date,new_cases)) + 
   geom_area(fill = "pink") +
   geom_line(color = "pink") +
   labs(title = "Covid-19 Cases, 2020", subtitle = "Santa Monica, CA", x="Date", y="Case Count") + 
-  plotTheme()
+  plotTheme(),
+ggplot(covid, aes(date,two_week_lag)) + 
+  geom_area(fill = "pink") +
+  geom_line(color = "pink") +
+  labs(title = "Covid-19 14-day Lag, 2020", subtitle = "Santa Monica, CA", x="Date", y="Cases from 2 weeks ago") + 
+  plotTheme(),
+ncol = 2,
+top = "Covid-19 Cases and 14-day Lag, 2020"
+)
 ```
 
 Figure XX displays weather conditions. In Santa Monica, the average income and health is relatively high, therefore making diabetes and violent crime less relevant to our analysis. Rather, we look to other accidents, including motor accidents. One of the key temporal predictors of traffic accidents is weather, therefore we visualize weather conditions. As it turns out, wind speed, wind gust, and precipitation appear slightly correlated with EMS calls. 
@@ -992,7 +1000,6 @@ ggplot()+
 
 The two hotspots are in Downtown and Mid City. Downtown: beach, Santa Monica pier, muscle beach: likely accidents from physical activity/overall high population density/nightlife
 ```{r Local Moran's: Identify hotspots + add isSig features}
-
 ################EMS Call Histogram################
 ggplot(data = final_net, aes(x=countEMS)) +
   geom_histogram() +
@@ -1053,7 +1060,7 @@ ACSTracts <- ACSTracts %>%
   st_transform(st_crs(fishnet))
 
 panel_net <- final_net %>%
-  dplyr::select(-tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -uninsured, -cancer, -asthma, -heartDisease, -pulmonaryDisease, -clinicalServicesWomen65, -diabetes, -smoking, -poorMentalHealth, -obese, -stroke, -median_age, -medHHInc, -pctVacant, -violentCrime.nn, -trash.nn, -socialservice.nn, -intersection.nn)
+  dplyr::select(-harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -uninsured, -cancer, -asthma, -heartDisease, -pulmonaryDisease, -clinicalServicesWomen65, -diabetes, -smoking, -poorMentalHealth, -obese, -stroke, -median_age, -pctVacant, -violentCrime.nn, -trash.nn, -socialservice.nn, -intersection.nn)
 
 dat_net <- st_join(EMS_18_20.sf,
         panel_net,            
@@ -1270,7 +1277,6 @@ as.data.frame(na.omit(study.panel.15)) %>%
 
 
 ```{r animation}
-
 week20 <-
   filter(EMS_18_20.sf, week == 20)
 
@@ -1339,10 +1345,19 @@ EMSallTrain <- EMSallTrain %>%
 EMSallTest <- EMSallTest %>%
   rename(Week = week) #AD: had to rename week as Week because R thought we were referencing the lubridate function week 
 
-reg_temp1 <- 
-  lm(EMS_Count ~  reporting_district + hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed + lagHour + lag2Hours +lag3Hours +lag12Hours + lag4Hours + lag1day, data = EMSallTrain)
+reg1_time <- 
+  lm(EMS_Count ~  hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed, data = EMSallTrain)
 
-summary(reg_temp1)  
+reg2_space <- 
+  #reporting_district + health factors + dotw + temperature 
+  
+reg3_time_space <- 
+  #reportinig district + dtw + hour(interval60) + temperature 
+
+reg4_lag <-
+  #lagHour + lag2Hours +lag3Hours +lag12Hours + lag4Hours + lag1day + all of above
+
+summary(reg1_time)  
 ##add reportingz
 
 ##nesting
@@ -1353,15 +1368,12 @@ EMS.Test.weekNest <-
 EMS.Test.weekNest
 
 
-
 model_pred <- function(dat, fit){
    pred <- predict(fit, newdata = dat)}
 
-
-
 week_predictions <- 
   EMS.Test.weekNest %>% 
-    mutate(Time_Space_FE_timeLags = map(.x = data, fit = reg_temp1, .f = model_pred)) %>%
+    mutate(Time_Space_FE_timeLags = map(.x = data, fit = reg1_time, .f = model_pred)) %>%
     gather(Regression, Prediction, -data, -Week) %>%
     mutate(Observed = map(data, pull, EMS_Count),
            Absolute_Error = map2(Observed, Prediction,  ~ abs(.x - .y)),
@@ -1369,7 +1381,8 @@ week_predictions <-
            sd_AE = map_dbl(Absolute_Error, sd, na.rm = TRUE),
            )
 
-#PLOT
+
+#Plot: MAE by Model Spec and Week
 week_predictions %>%
   dplyr::select(Week, Regression, MAE) %>%
   gather(Variable, MAE, -Regression, -Week) %>%
@@ -1379,6 +1392,8 @@ week_predictions %>%
     labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
   plotTheme()
 #the mae is much lower when we use uniqueID instead of reporting-district
+
+
 #PLOT AGAINST ACTUAL SERIES
 
 week_predictions <- week_predictions %>% 
