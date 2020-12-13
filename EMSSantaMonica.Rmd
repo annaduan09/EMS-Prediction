@@ -773,10 +773,8 @@ ggplot(correlation.long, aes(Value, countEMS)) +
   plotTheme()
 ```
 
-What about the temporal risk factors for EMS incidents?
-```{r exploratory}
-
-################EMS Calls################
+What about the temporal risk factors for EMS incidents? First, we visualize the incidence of EMS calls over the past year. It appears that calls peak in spring, drop during the summer, and pick up again in fall. 
+```{r ems call / time}
 EMS_2020 %>%
   mutate(count = 1) %>%
     group_by(incident_date) %>% 
@@ -785,31 +783,35 @@ EMS_2020 %>%
       ggplot(aes(incident_date, EMS_Count)) + 
   geom_area(fill = "pink") +
   geom_line(color = "pink") +
-        labs(title="EMS trips, 2020",
+        labs(title="EMS Calls, 2020",
              subtitle="Santa Monica, CA", 
              x="Day", y="EMS Count") +
         plotTheme() + theme(panel.grid.major = element_blank())   
+```
 
-################COVID################
+Figure XX shows Covid-19 cases in Santa Monica. Daily case counts are relatively low until a peak in July. Cases begin to increase rapidly starting in October. There doesn't appear to be a correlation with EMS calls, however. This may be because Santa Monica has relatively few cases of Covid-19.
+```{r covid cases / time}
 covid <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/coronavirus.csv") %>%
-  filter(place == "Santa Monica") %>%
   st_as_sf(coords = c("x", "y"), crs = 4326, agr = "constant") %>%
     st_transform('EPSG:2225') %>%
     mutate(date = as.POSIXct(date)) %>%
-  dplyr::select(date, confirmed_cases, geometry) %>%
+  dplyr::select(date, confirmed_cases, new_cases, geometry) %>%
   rename(Case_Count = confirmed_cases) %>%
   mutate(day = day(date),
          week = week(date),
          month = month(date),
-         Case_Count = as.numeric(Case_Count))
+         Case_Count = as.numeric(Case_Count),
+         new_cases = as.numeric(new_cases))
 
-ggplot(covid, aes(date,Case_Count)) + 
+ggplot(covid, aes(date,new_cases)) + 
   geom_area(fill = "pink") +
   geom_line(color = "pink") +
   labs(title = "Covid-19 Cases, 2020", subtitle = "Santa Monica, CA", x="Date", y="Case Count") + 
   plotTheme()
+```
 
-################Weather Conditions################
+Figure XX displays weather conditions. In Santa Monica, the average income and health is relatively high, therefore making diabetes and violent crime less relevant to our analysis. Rather, we look to other accidents, including motor accidents. One of the key temporal predictors of traffic accidents is weather, therefore we visualize weather conditions. As it turns out, wind speed, wind gust, and precipitation appear slightly correlated with EMS calls. 
+```{r weather conditions/time}
 library(ggplot2)
 library(gridExtra)
 #vsby: visibility; sknt:wind speed; gust:wind gust in knots
@@ -825,8 +827,62 @@ grid.arrange(
   ggplot(weather.Panel, aes(interval60,wind_gust)) + geom_line() + 
     labs(title="Wind Gust in Knots", x="Month", y="wind gust") + plotTheme(),
   top="Weather Data, 2020 - Santa Monica, CA")
+```
 
-################Call Times################
+We also look to holidays. On these days, there is expected to be a higher density of people outdoors celebrating and likely more injuries as well. To do this, we identify a few of the holidays where Americans consume the most alcohol, and plot them against EMS calls. From Figure XX, it appears that ___, ___, and ____ do align with peaks in demand.
+```{r EMS calls / Holidays}
+
+################Holidays################
+mondays <- #for refernece in the graphic
+  mutate(study.panel,
+         monday = ifelse(dotw == "Mon" & hour(interval60) == 1,
+                         interval60, 0)) %>%
+  filter(monday != 0) 
+
+thanksgivingEve   <- as.POSIXct("2020-11-26 01:00:00")
+xmasEve <- as.POSIXct("2019-12-24 01:00:00")
+laborDay <- as.POSIXct("2020-9-7 01:00:00")
+july4 <- as.POSIXct("2020-7-4 01:00:00")
+newYear <- as.POSIXct("2020-1-1 01:00:00")
+mardiGras <- as.POSIXct("2020-2-25 01:00:00")
+#Holidays
+
+##labor day
+##4th of July
+##new year's
+##saint patrick's 
+##cinco de mayoun
+##Mardi gras
+##Memorial day
+##December to march: most cases of 0.06+BAC [https://www.washingtonpost.com/news/wonk/wp/2014/12/20/the-days-of-the-year-when-americans-are-most-drunk-visualized/]
+#[https://www.alcohol.org/guides/booziest-holidays/]
+
+holidayPlot <- rbind(
+  mutate(EMS.Train, Legend = "Training"), 
+  mutate(EMS.Test, Legend = "Testing")) %>%
+    group_by(Legend, interval60) %>% 
+      summarize(EMS_Count = sum(EMS_Count)) %>%
+      ungroup() 
+
+holidayPlot <- study.panel %>%
+  group_by(interval60) %>%
+        summarize(EMS_Count = sum(EMS_Count)) %>%
+      ungroup() 
+
+holidayPlot %>%
+       ggplot(aes(interval60, EMS_Count)) + geom_line(colour = "maroon") +
+        geom_vline(xintercept = thanksgivingEve, linetype = "dotted") +
+        geom_vline(xintercept = newYear, linetype = "dotted") +
+        geom_vline(xintercept = mardiGras, linetype = "dotted") +
+       # geom_vline(data = mondays, aes(xintercept = monday)) +
+        labs(title="EMS Calls by week: 2019-2020",
+             subtitle="Dotted lines for Holidays", 
+             x="Day", y="Trip Count") +
+        plotTheme() + theme(panel.grid.major = element_blank())
+```
+
+Next, we examine in greater detail when EMS calls themselves occur. Figure XX shows that they are most frequent on weekdays, and that it first peaks at 1am, then at 12:30pm and 3pm respectively on weekdays and weekends. Additionally, cases peak on Monday.
+```{r calls / time of day}
 EMS_18_20 <- EMS_18_20 %>%
   mutate(interval60 = floor_date(ymd_hms(received), unit = "hour"),
          interval15 = floor_date(ymd_hms(received), unit = "15 mins"),
@@ -866,15 +922,6 @@ ggplot(EMS_18_20 %>% mutate(hour = hour(interval60)))+
        x="Hour", 
        y="EMS Calls")+
      plotTheme(),
-ggplot(EMS_18_20 %>% mutate(hour = hour(interval60)))+
-     geom_freqpoly(aes(month), binwidth = 1)+
-  labs(title="Month",
-       x="Month", 
-       y="EMS Calls") +
-     plotTheme(),
-ncol=2,
-top = "EMS Calls by Day of Week and Month, 2018-2020")
-
 ggplot(EMS_18_20 %>% 
          mutate(hour = hour(received),
                 weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday")))+
@@ -882,57 +929,9 @@ ggplot(EMS_18_20 %>%
   labs(title="EMS Calls Weekend vs Weekday, 2020",
        x="Hour", 
        y="Trip Counts")+
-     plotTheme()
-
-
-
-################Holidays################
-mondays <- #for refernece in the graphic
-  mutate(study.panel,
-         monday = ifelse(dotw == "Mon" & hour(interval60) == 1,
-                         interval60, 0)) %>%
-  filter(monday != 0) 
-
-thanksgivingEve   <- as.POSIXct("2020-11-26 01:00:00")
-xmasEve <- as.POSIXct("2019-12-24 01:00:00")
-laborDay <- as.POSIXct("2020-9-7 01:00:00")
-july4 <- as.POSIXct("2020-7-4 01:00:00")
-newYear <- as.POSIXct("2020-1-1 01:00:00")
-mardiGras <- as.POSIXct("2020-2-25 01:00:00")
-#Holidays
-
-##labor day
-##4th of July
-##new year's
-##saint patrick's 
-##cinco de mayoun
-##Mardi gras
-##Memorial day
-##December to march: most cases of 0.06+BAC [https://www.washingtonpost.com/news/wonk/wp/2014/12/20/the-days-of-the-year-when-americans-are-most-drunk-visualized/]
-#[https://www.alcohol.org/guides/booziest-holidays/]
-
-holidayPlot <- rbind(
-  mutate(EMS.Train, Legend = "Training"), 
-  mutate(EMS.Test, Legend = "Testing")) %>%
-    group_by(Legend, interval60) %>% 
-      summarize(EMS_Count = sum(EMS_Count)) %>%
-      ungroup() 
-
-holidayPlot %>%
-       ggplot(aes(interval60, EMS_Count, colour = Legend)) + geom_line() +
-        scale_colour_manual(values = palette2) +
-        geom_vline(xintercept = thanksgivingEve, linetype = "dotted") +
-        geom_vline(xintercept = newYear, linetype = "dotted") +
-        geom_vline(xintercept = mardiGras, linetype = "dotted") +
-       # geom_vline(data = mondays, aes(xintercept = monday)) +
-        labs(title="EMS Calls by week: 2018-2020",
-             subtitle="Dotted lines for Holidays", 
-             x="Day", y="Trip Count") +
-        plotTheme() + theme(panel.grid.major = element_blank())
-
-
-
-####
+     plotTheme(),
+ncol=2,
+top = "EMS Calls by Day of Week, 2018-2020")
 
 ggplot(EMS_18_20 %>%
          group_by(dotw) %>%
@@ -943,6 +942,10 @@ ggplot(EMS_18_20 %>%
        y="Number of trips")+
   plotTheme()
 
+```
+
+
+```{r EMS call / AM PM Rush}
 
 ####AM/PM Rushes####
 EMS_18_20 %>% 
@@ -961,21 +964,6 @@ EMS_18_20 %>%
        y="Frequency")+
   facet_wrap(~time_of_day)+
   plotTheme()
-
-
-####Cases every saturday####
-
-#on a RANDOM Wednesday
-EMS_18_20_W1 <- subset(EMS_18_20, dotw=="Sat")
-ggplot(EMS_18_20_W1 %>%
-         group_by(interval60) %>%
-         tally())+
-  geom_line(aes(x = interval60, y = n))+
-  labs(title="FEMS trips, Santa Monica, 2020 by day of the week",
-       x="Day", 
-       y="Number of trips")+
-  plotTheme()
-
 
 
 #origin map      #AD: why is this map rotated 90 degrees?
@@ -1000,8 +988,6 @@ ggplot()+
   facet_grid(weekend ~ time_of_day)+
   labs(title="Figure 4.5: EMS calls per hr by reporting district. Santa Monica, 2020")+
   mapTheme()
-
-
 ```
 
 The two hotspots are in Downtown and Mid City. Downtown: beach, Santa Monica pier, muscle beach: likely accidents from physical activity/overall high population density/nightlife
@@ -1259,7 +1245,6 @@ rbind(
 
 ```{r Time Lag Tables}
 
-
 as.data.frame(study.panel) %>%
     group_by(interval60) %>% 
     summarise_at(vars(starts_with("lag"), "EMS_Count"), mean, na.rm = TRUE) %>%
@@ -1355,8 +1340,7 @@ EMSallTest <- EMSallTest %>%
   rename(Week = week) #AD: had to rename week as Week because R thought we were referencing the lubridate function week 
 
 reg_temp1 <- 
-  lm(EMS_Count ~  reporting_district + hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed + lagHour + lag2Hours +lag3Hours +lag12Hours + lag4Hours + lag1day, 
-     data=EMSallTrain)
+  lm(EMS_Count ~  reporting_district + hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed + lagHour + lag2Hours +lag3Hours +lag12Hours + lag4Hours + lag1day, data = EMSallTrain)
 
 summary(reg_temp1)  
 ##add reportingz
@@ -1377,7 +1361,7 @@ model_pred <- function(dat, fit){
 
 week_predictions <- 
   EMS.Test.weekNest %>% 
-    mutate(Time_Space_FE_timeLags = map(.x = data, fit = reg_temp1, .f = model_pred)) %>%  #AD: not working.
+    mutate(Time_Space_FE_timeLags = map(.x = data, fit = reg_temp1, .f = model_pred)) %>%
     gather(Regression, Prediction, -data, -Week) %>%
     mutate(Observed = map(data, pull, EMS_Count),
            Absolute_Error = map2(Observed, Prediction,  ~ abs(.x - .y)),
@@ -1468,49 +1452,6 @@ error.byHour <-
 
 
 ```
-
-
-
-```{r spatial bi model}
-#AD: don't think we need this anymore 
-#set.seed(10)
-#trainIndex <- createDataPartition(final_net$countEMS, 
-#                                  p = .65,
-#                                  list = FALSE,
-#                                  times = 1)
-#EMSTrain <- final_net[ trainIndex,]
-#EMSTest  <- final_net[-trainIndex,]
-
-#reg0 <- glm(countEMS ~ .,
-#                  data=st_drop_geometry(EMSTrain) %>% 
-#                    dplyr::select(countEMS, harmfullanduse, markings, servicerequest, streetlights, Trash, Violent_Crime, uninsured, arthritis, bingeDrink, highBloodPressure, bloodPressureMeds, cancer, asthma, heartDisease, doctorCheckups, cholesterolScreen, colonScreen65, pulmonaryDisease, clinicalServicesMen65, clinicalServicesWomen65, smoking, dentalVisits, diabetes, highCholesterol, kidneyDisease, noPhysicalActivity, mammograms50, poorMentalHealth, obese, papTest, poorPhysicalHealth, sleepDeprived, stroke, noTeeth, median_age, medianage_male, medianage_female, population, medHHInc, pctVacant, pctWhite, pctRenterOcc, pctNoHS, pctPoverty, youthUnemploy, pctMaleYouth, violentCrime.nn, trash.nn, streetlightissue.nn, signandmarking.nn, socialservice.nn, harmfullu.nn, sport.nn, bar.nn, intersection.nn, downtown.nn, EMS.isSig, EMS.isSig.dist))
-            
-#            , #delete all the NAs
-#                  family="binomial" (link="logit"))
-
-#testProbs_ks <- data.frame(Outcome = as.factor(EMSTest$Count_EMS),
-#                        Probs = predict(reg0, EMSTest, type= "response"))
-
-#testProbs_ks <- 
-#  testProbs_ks %>%
-#  mutate(predOutcome  = as.factor(ifelse(testProbs_ks$Probs > 0.5 , 1, 0))) 
-
-#confusion matrix
-#caret::confusionMatrix(testProbs_ks$predOutcome, testProbs_ks$Outcome, 
- #                      positive = "1")
-
-#ROC
-#ggplot(testProbs_ks, aes(d = as.numeric(Outcome), m = Probs)) +
-#  geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") + 
-#  style_roc(theme = theme_grey) +
-#  geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
-#  labs(title = "Figure 4.1: ROC Curve - features model")
-
-#area under curve 
-#pROC::auc(testProbs_ks$Outcome, testProbs_ks$Probs) 
-
-```
-
 
 
 ```{r map: spatial distribution of MAE}
