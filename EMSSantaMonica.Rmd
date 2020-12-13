@@ -707,14 +707,9 @@ p3 <- grid.arrange(arrangeGrob(resp_2020 + theme(legend.position="none"),
                                resp_1020 + theme(legend.position="none"),
                                nrow=1),
                    mylegend, nrow=2,heights=c(40, 40), top = "Observed EMS Response Times, 2010-2020")
-#interesting! The response time in 2020 is actually lower than 2018-2019 on average.
-#The EMS is not that overwhelmed 
-#AD - Yeah i noticed! I read a study this morning about EMS calls during the pandemic and they found that in some cases people were less likely to call EMS due to fear of catching covid at the hospital. 
 ``` 
 
-To better understand the spatial distribution of EMS calls, we also analyze the spatial distribution of some of its risk factors. We use health factors related to health emergencies such as past incidence of stroke, heart disease, and high blood pressure. We also use demographic features related to groups at high risk of relying on emergency medical services as their primary healthcare including poverty rate, unemployment, and percent white. In addition, we use environmental features related to poor community health including harmful land use, street light issues, and municipal service requests. Finally, we map violent crime incidents, perhaps the most direct proxy for EMS demand. 
-
-Several patterns emerged: 
+To better understand the spatial distribution of EMS calls, we also analyze the spatial distribution of some of its risk factors. We use health factors related to health emergencies such as past incidence of stroke, heart disease, and high blood pressure. We also use demographic features related to groups at high risk of relying on emergency medical services as their primary healthcare including poverty rate, unemployment, and percent white. In addition, we use environmental features related to poor community health including harmful land use, street light issues, and municipal service requests. Finally, we map violent crime incidents, perhaps the most direct proxy for EMS demand. We find three main patterns:
 
 1. The distribution of uninsured residents, asthma, older women with access to basic clinical services, smoking, poor mental health, obesity, stroke, median household income, and poverty point to an area in the middle of the city that appears to be highly economically disadvantaged and in poor health. Surprisingly though, these areas are not in the hotspots for EMS calls.  
 2. Service requests, trash complaints, violent crime, binge drinking, and bars are clustered in the downtown region, the biggest hotspot for EMS calls.  
@@ -788,7 +783,7 @@ EMS_2020 %>%
         plotTheme() + theme(panel.grid.major = element_blank())   
 ```
 
-Figure XX shows Covid-19 cases in Santa Monica. Daily case counts are relatively low until a peak in July. Cases begin to increase rapidly starting in October. There doesn't appear to be a correlation with EMS calls, however. This may be because Santa Monica has relatively few cases of Covid-19.
+Figure XX shows Covid-19 cases in Santa Monica with a 14 day lag. This is because Covid-19 do not become symptomatic until 14 days after exposure, therefore any cases involved in an EMS call were contracted around two weeks prior. These numbers are relatively low until a peak in July. Cases begin to increase rapidly starting in November There doesn't appear to be a correlation with EMS calls, however. This may be because Santa Monica has relatively few cases of Covid-19 compared to its total EMS calls.
 ```{r covid cases / time}
 covid <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/coronavirus.csv") %>%
   st_as_sf(coords = c("x", "y"), crs = 4326, agr = "constant") %>%
@@ -865,13 +860,6 @@ mardiGras <- as.POSIXct("2020-2-25 01:00:00")
 ##December to march: most cases of 0.06+BAC [https://www.washingtonpost.com/news/wonk/wp/2014/12/20/the-days-of-the-year-when-americans-are-most-drunk-visualized/]
 #[https://www.alcohol.org/guides/booziest-holidays/]
 
-holidayPlot <- rbind(
-  mutate(EMS.Train, Legend = "Training"), 
-  mutate(EMS.Test, Legend = "Testing")) %>%
-    group_by(Legend, interval60) %>% 
-      summarize(EMS_Count = sum(EMS_Count)) %>%
-      ungroup() 
-
 holidayPlot <- study.panel %>%
   group_by(interval60) %>%
         summarize(EMS_Count = sum(EMS_Count)) %>%
@@ -881,8 +869,10 @@ holidayPlot %>%
        ggplot(aes(interval60, EMS_Count)) + geom_line(colour = "maroon") +
         geom_vline(xintercept = thanksgivingEve, linetype = "dotted") +
         geom_vline(xintercept = newYear, linetype = "dotted") +
+        geom_vline(xintercept = xmasEve, linetype = "dotted") +
+        geom_vline(xintercept = july4, linetype = "dotted") +
+        geom_vline(xintercept = laborDay, linetype = "dotted") +
         geom_vline(xintercept = mardiGras, linetype = "dotted") +
-       # geom_vline(data = mondays, aes(xintercept = monday)) +
         labs(title="EMS Calls by week: 2019-2020",
              subtitle="Dotted lines for Holidays", 
              x="Day", y="Trip Count") +
@@ -934,7 +924,7 @@ ggplot(EMS_18_20 %>%
          mutate(hour = hour(received),
                 weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday")))+
      geom_freqpoly(aes(hour, color = weekend), binwidth = 1)+
-  labs(title="EMS Calls Weekend vs Weekday, 2020",
+  labs(title="Weekend vs Weekday, 2020",
        x="Hour", 
        y="Trip Counts")+
      plotTheme(),
@@ -952,7 +942,7 @@ ggplot(EMS_18_20 %>%
 
 ```
 
-
+What about the relationship between EMS and rush hour? These are times where more people are outside, and therefore there may be more traffic and other accidents. Overall, call volume is similar across each rush period, although it is slightly lower in the morning rush. Figure XX shows that during weekdays, there is a substantial surge in EMS calls in the downtown area during the overnight period. This is contrary to our expectations, as we expected that nightlife is more signficant during the weekend, leading to more weekend nighttime EMS calls.
 ```{r EMS call / AM PM Rush}
 
 ####AM/PM Rushes####
@@ -998,14 +988,10 @@ ggplot()+
   mapTheme()
 ```
 
-The two hotspots are in Downtown and Mid City. Downtown: beach, Santa Monica pier, muscle beach: likely accidents from physical activity/overall high population density/nightlife
-```{r Local Moran's: Identify hotspots + add isSig features}
-################EMS Call Histogram################
-ggplot(data = final_net, aes(x=countEMS)) +
-  geom_histogram() +
-  labs(title = "Distribution of EMS Incidents, 2018-2020", subtitle = "Santa Monica, CA", x = "Fishnet Cells", y = "EMS Incidents Observed") +
-  plotTheme()
+# EMS Call Hotspots 
+With an idea of where and when EMS calls occur, we now use a Local Moran's I statistic to identify statistically significant spatial hotspots for EMS calls. Next, we use a Local Moran's I statistic to identify statistically significant hot spots for EMS calls in Santa Monica. Using this method, we find areas where the clustering of EMS calls is greater than it would be if they were randomly distributed. In Figure XX, we see that of the fishnet grids with high rates of EMS calls, only some of them have high clustering (Moran's I). Next, we use the p-value of the Moran's I value to identify areas with high clustering that also have a high confidence level in their Moran's I. This leaves us with two distinct hot spots in Santa Monica: one in the downtown area, and one in Midtown.These hotspots make sense: the downtown area has a beach, the Santa Monica pier, and Muscle Beach, three locations with high daytime occupancy and high risk for accidents. 
 
+```{r Local Moran's: Identify hotspots + add isSig features}
 
 ##Prepare for moran's
 library(spdep)
@@ -1051,6 +1037,8 @@ final_net <-
                          filter(final_net, EMS.isSig == 1))), 1))
 ```
 
+# Study Panels  
+The next step in this analysis is to create space/time panels of temporal and spatial features for each unique space/time unit pair. We now engineer a new features: temporal lag, which lets us examine temporal correlation in EMS calls. For instance, lagHour is the number of EMS calls in the past hour. In Figure XX, we see that 15 minute lag appears to correlate with EMS count. 
 ```{r Time Exploration: panels + time lags}
 library(dplyr)
 
@@ -1084,6 +1072,7 @@ study.panel.rd <-
 study.panel.15 <- 
   expand.grid(interval15=unique(dat_net$interval15), 
               reporting_district = unique(EMS_2020$reporting_district)) 
+
 
 
 library(vctrs)
@@ -1149,12 +1138,32 @@ study.panel.rd <-
          lag1day = dplyr::lag(EMS_Count,24)) %>% 
    mutate(day = yday(interval60))
 
+study.panel.net <- dat_net %>%
+  dplyr::select(reporting_district, station, interval15, tract, servicerequest, Trash, Violent_Crime, ZIPCODE, EMS.isSig.dist, uniqueID) %>%
+  merge(x=study.panel, y=., by.x = "uniqueID", by.y = "uniqueID", all.x = TRUE) %>%
+      filter(is.na(uniqueID) == FALSE)
+
+
+
+
+study.panel.net <- 
+  study.panel.net %>% 
+  arrange(uniqueID, interval60) %>% 
+  mutate(lagHour = dplyr::lag(EMS_Count,1),
+         lag2Hours = dplyr::lag(EMS_Count,2),
+         lag3Hours = dplyr::lag(EMS_Count,3),
+         lag4Hours = dplyr::lag(EMS_Count,4),
+         lag12Hours = dplyr::lag(EMS_Count,12),
+         lag1day = dplyr::lag(EMS_Count,24)) %>% 
+   mutate(day = yday(interval60))
+  
+
 #lagHour / EMS Count plot
 cor_lag <- na.omit(study.panel.rd[, c("interval60","reporting_district","EMS_Count", "lagHour")])
 plot(cor_lag$EMS_Count, cor_lag$lagHour)
 cor.test(cor_lag$EMS_Count, cor_lag$lagHour, method = c("pearson", "kendall", "spearman"))
 #0.01383557 
-table(cor_lag$EMS_Count, cor_lag$lagHour)
+table(cor_lag$EMS_Count, cor_lag$lagHour)  
 #        1     2     3     4
 #  1 14252  1127    80     6
 #  2  1136   107     3     0
@@ -1250,6 +1259,7 @@ rbind(
         plotTheme() + theme(panel.grid.major = element_blank())   
 ``` 
 
+Table XX shows us in more detail correlations between EMS calls and lags. We see that the strongest correlation is with 30 and 45 minute lag. 
 ```{r Time Lag Tables}
 
 as.data.frame(study.panel) %>%
@@ -1327,35 +1337,38 @@ trainIndex <- createDataPartition(study.panel.rd$EMS_Count,
                                   p = .65,
                                   list = FALSE,
                                   times = 1)
-EMSallTrain <- study.panel.rd[ trainIndex,]
-EMSallTest  <- study.panel.rd[-trainIndex,] 
+study.panel.net <- study.panel.net %>%
+  na.omit() %>%
+  mutate(tract = as.factor(tract))
 
-EMS.Train <- subset(study.panel.rd,
-     interval60 >= as.POSIXct('2018-12-08') &
-     interval60 < as.POSIXct('2020-4-08')
-     )
-EMS.Test <- subset(study.panel.rd,
-     interval60 >= as.POSIXct('2020-4-08') &
-     interval60 <= as.POSIXct('2020-12-08')
-     )
+EMSallTrain <- study.panel.net[ trainIndex,]
+EMSallTest  <- study.panel.net[-trainIndex,] 
+
+#EMS.Train <- subset(study.panel.net,
+#     interval60 >= as.POSIXct('2018-12-08') &
+#     interval60 < as.POSIXct('2020-4-08')
+#     )
+#EMS.Test <- subset(study.panel.net,
+#     interval60 >= as.POSIXct('2020-4-08') &
+#     interval60 <= as.POSIXct('2020-12-08')
+#     )
 
 EMSallTrain <- EMSallTrain %>%
   rename(Week = week)
 
 EMSallTest <- EMSallTest %>%
-  rename(Week = week) #AD: had to rename week as Week because R thought we were referencing the lubridate function week 
+  rename(Week = week) 
 
 reg1_time <- 
   lm(EMS_Count ~  hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed, data = EMSallTrain)
 
 reg2_space <- 
-  #reporting_district + health factors + dotw + temperature 
+  lm(EMS_Count ~ uniqueID + Violent_Crime + bar.nn + downtown.nn, data = EMSallTrain)
   
 reg3_time_space <- 
-  #reportinig district + dtw + hour(interval60) + temperature 
+  lm(EMS_Count ~ hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed + uniqueID + Violent_Crime + bar.nn + downtown.nn, data = EMSallTrain)
 
-reg4_lag <-
-  #lagHour + lag2Hours +lag3Hours +lag12Hours + lag4Hours + lag1day + all of above
+reg4_lag <-   lm(EMS_Count ~ hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed + uniqueID + Violent_Crime + bar.nn + downtown.nn + lagHour + lag2Hours + lag4Hours + lag12Hours + lag1day, data = EMSallTrain)
 
 summary(reg1_time)  
 ##add reportingz
@@ -1373,7 +1386,10 @@ model_pred <- function(dat, fit){
 
 week_predictions <- 
   EMS.Test.weekNest %>% 
-    mutate(Time_Space_FE_timeLags = map(.x = data, fit = reg1_time, .f = model_pred)) %>%
+    mutate(Time = map(.x = data, fit = reg1_time, .f = model_pred),
+           Space = map(.x = data, fit = reg1_time, .f = model_pred),
+           Time_Space = map(.x = data, fit = reg1_time, .f = model_pred),
+           Time_Space_Lag = map(.x = data, fit = reg1_time, .f = model_pred),) %>%
     gather(Regression, Prediction, -data, -Week) %>%
     mutate(Observed = map(data, pull, EMS_Count),
            Absolute_Error = map2(Observed, Prediction,  ~ abs(.x - .y)),
@@ -1381,14 +1397,12 @@ week_predictions <-
            sd_AE = map_dbl(Absolute_Error, sd, na.rm = TRUE),
            )
 
-
 #Plot: MAE by Model Spec and Week
 week_predictions %>%
   dplyr::select(Week, Regression, MAE) %>%
   gather(Variable, MAE, -Regression, -Week) %>%
   ggplot(aes(Week, MAE)) + 
-    geom_bar(aes(fill = Regression), position = "dodge", stat="identity") +
-    scale_fill_manual(values = palette5) +
+    geom_bar(aes(fill = Regression, colour = Regression), position = "dodge", stat="identity") +
     labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
   plotTheme()
 #the mae is much lower when we use uniqueID instead of reporting-district
@@ -1469,9 +1483,6 @@ error.byHour <-
 ```
 
 
-```{r map: spatial distribution of MAE}
-```
-
 ```{r generalizability}
 #racial contexts
 #neighborhoods/zip codes?
@@ -1479,11 +1490,68 @@ error.byHour <-
 #
 ```
 
-```{r map: predicted vs observed}
+```{r plot: predicted vs observed}
+week_predictions %>% 
+    mutate(interval60 = map(data, pull, interval60),
+           start_station = map(data, pull, start_station), 
+           start_lat = map(data, pull, start_lat), 
+           start_lon = map(data, pull, start_lon),
+           dotw = map(data, pull, dotw)) %>%
+    dplyr::select(interval60, start_station, start_lon, 
+           start_lat, Observed, Prediction, Regression,
+           dotw) %>%
+    unnest() %>%
+  filter(Regression == "DTime_Space_FE_timeLags")%>%
+  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
+         time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
+                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
+                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
+                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush"))%>%
+  ggplot()+
+  geom_point(aes(x= Observed, y = Prediction))+
+    geom_smooth(aes(x= Observed, y= Prediction), method = "lm", se = FALSE, color = "red")+
+    geom_abline(slope = 1, intercept = 0)+
+  facet_grid(time_of_day~weekend)+
+  labs(title="Figure 5.4: Observed vs Predicted",
+       x="Observed trips", 
+       y="Predicted trips")+
+  plotTheme
 ```
 
-```{r map: map of errors}
+
+```{r map: spatial distribution of MAE}
+week_predictions %>% 
+    mutate(interval60 = map(data, pull, interval60),
+           start_station = map(data, pull, start_station), 
+           start_lat = map(data, pull, start_lat), 
+           start_lon = map(data, pull, start_lon),
+           dotw = map(data, pull, dotw)) %>%
+    dplyr::select(interval60, start_station, start_lon, 
+           start_lat, Observed, Prediction, Regression,
+           dotw) %>%
+    unnest() %>%
+  filter(Regression == "DTime_Space_FE_timeLags")%>%
+  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
+         time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
+                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
+                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
+                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush")) %>%
+  group_by(start_station, weekend, time_of_day, start_lon, start_lat) %>%
+  summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))%>%
+  ggplot(.)+
+  geom_sf(data = PhillyTracts%>%
+    st_transform(st_crs(4326)), color = "grey", fill = "transparent")+
+  geom_point(aes(x = start_lon, y = start_lat, color = MAE), 
+             fill = "transparent", size = 0.5, alpha = 1)+
+  scale_colour_viridis(direction = -1,
+  discrete = FALSE, option = "D")+
+  ylim(min(dat_census$start_lat), max(dat_census$start_lat))+
+  xlim(min(dat_census$start_lon), max(dat_census$start_lon))+
+  facet_grid(weekend~time_of_day)+
+  labs(title="Figure 5.5: Mean Absolute Errors, Test Set")+
+  mapTheme
 ```
+
 
 ```{r comparison with kernel density}
 ```
