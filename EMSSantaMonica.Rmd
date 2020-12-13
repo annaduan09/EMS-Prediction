@@ -1041,14 +1041,12 @@ final_net <-
 The next step in this analysis is to create space/time panels of temporal and spatial features for each unique space/time unit pair. We now engineer a new features: temporal lag, which lets us examine temporal correlation in EMS calls. For instance, lagHour is the number of EMS calls in the past hour. In Figure XX, we see that 15 minute lag appears to correlate with EMS count. 
 ```{r Time Exploration: panels + time lags}
 library(dplyr)
-
 ACSTracts <- ACSTracts %>%
           st_transform(crs=4326) %>%
   st_as_sf() %>%
   st_transform(st_crs(fishnet))
-
 panel_net <- final_net %>%
-  dplyr::select(-harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -uninsured, -cancer, -asthma, -heartDisease, -pulmonaryDisease, -clinicalServicesWomen65, -diabetes, -smoking, -poorMentalHealth, -obese, -stroke, -median_age, -pctVacant, -violentCrime.nn, -trash.nn, -socialservice.nn, -intersection.nn)
+  dplyr::select(-tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -uninsured, -cancer, -asthma, -heartDisease, -pulmonaryDisease, -clinicalServicesWomen65, -diabetes, -smoking, -poorMentalHealth, -obese, -stroke, -median_age, -medHHInc, -pctVacant, -violentCrime.nn, -trash.nn, -socialservice.nn, -intersection.nn)
 
 dat_net <- st_join(EMS_18_20.sf,
         panel_net,            
@@ -1062,21 +1060,15 @@ dat_net <- st_join(EMS_18_20.sf,
 study.panel <- 
   expand.grid(interval60=unique(dat_net$interval60), 
               uniqueID = unique(dat_net$uniqueID))
-
 EMS_18_20.sample <- EMS_18_20[sample(nrow(EMS_18_20), 1500), ]
-
 study.panel.rd <-
   expand.grid(interval60=unique(EMS_18_20$interval60), 
               reporting_district= unique(EMS_18_20$reporting_district))
-
 study.panel.15 <- 
   expand.grid(interval15=unique(dat_net$interval15), 
               reporting_district = unique(EMS_2020$reporting_district)) 
 
-
-
 library(vctrs)
-
 study.panel <- 
   dat_net %>%
   mutate(EMS_Counter = 1) %>%
@@ -1138,34 +1130,7 @@ study.panel.rd <-
          lag1day = dplyr::lag(EMS_Count,24)) %>% 
    mutate(day = yday(interval60))
 
-#r connect net data to EMS
-EMS_netData <- st_join(EMS_18_20.sf, final_net %>%
-                         dplyr::select(uniqueID, tract, countEMS, servicerequest, Trash, Violent_Crime, medHHInc, bar.nn, downtown.nn, EMS.isSig.dist), 
-                       join = st_intersects,
-                       left = TRUE) %>%
-  as.data.frame() %>%
-  select(-geometry)
-#final panel
-study.panel.final <- 
-  expand.grid(interval60=unique(EMS_netData$interval60), 
-              uniqueID = unique(EMS_netData$uniqueID)) %>%
-  left_join(., EMS_netData %>%
-              select(uniqueID, tract, countEMS, servicerequest, Trash, Violent_Crime, medHHInc, bar.nn, downtown.nn, EMS.isSig.dist) %>%
-              distinct() %>%
-              group_by(uniqueID) %>%
-              slice(1))
 
-study.panel.final <- 
-  study.panel.final %>% 
-  arrange(uniqueID, interval60) %>% 
-  mutate(lagHour = dplyr::lag(EMS_Count,1),
-         lag2Hours = dplyr::lag(EMS_Count,2),
-         lag3Hours = dplyr::lag(EMS_Count,3),
-         lag4Hours = dplyr::lag(EMS_Count,4),
-         lag12Hours = dplyr::lag(EMS_Count,12),
-         lag1day = dplyr::lag(EMS_Count,24)) %>% 
-   mutate(day = yday(interval60))
-  
 
 #lagHour / EMS Count plot
 cor_lag <- na.omit(study.panel.rd[, c("interval60","reporting_district","EMS_Count", "lagHour")])
@@ -1340,7 +1305,7 @@ animate(EMS_animation, duration=60, fps=50, renderer = gifski_renderer())
 anim_save("ems_local", EMS_animation, duration=60, renderer = gifski_renderer())
 ```
 
-# Temporal Validation
+# Linear Regression Models
 ```{r temporal model}
 #split data sets
 library(caret)
@@ -1350,6 +1315,7 @@ trainIndex <- createDataPartition(study.panel.rd$EMS_Count,
                                   p = .65,
                                   list = FALSE,
                                   times = 1)
+
 study.panel.net <- study.panel.net %>%
   na.omit() %>%
   mutate(tract = as.factor(tract))
@@ -1385,7 +1351,10 @@ reg4_lag <-   lm(EMS_Count ~ hour(interval60) + dotw + Temperature + Precipitati
 
 summary(reg1_time)  
 ##add reportingz
+```
 
+# Predict on test data
+```{r predict on test data}
 ##nesting
 EMS.Test.weekNest <- 
   as.data.frame(EMSallTest) %>%
@@ -1409,7 +1378,9 @@ week_predictions <-
            MAE = map_dbl(Absolute_Error, mean, na.rm = TRUE),
            sd_AE = map_dbl(Absolute_Error, sd, na.rm = TRUE),
            )
+```
 
+```{r Temporal Accuracy}
 #Plot: MAE by Model Spec and Week
 week_predictions %>%
   dplyr::select(Week, Regression, MAE) %>%
@@ -1475,7 +1446,7 @@ week_predictions.latlon %>%
 
 ```
 
-# Spatial Validation 
+# Spatial Accuracy
 ```{r spatial validation}
 error.byWeek <-
   week_predictions.latlon%>%
@@ -1495,14 +1466,33 @@ error.byHour <-
 
 ```
 
+# Cross Validation
+```{r cross validation}
+library(caret)
 
-```{r generalizability}
-#racial contexts
-#neighborhoods/zip codes?
-#reporting districts
-#
+bikenetsample <- sample_n(ride.panel, 100000)%>%
+  na.omit()
+
+fitControl <- trainControl(method = "cv", 
+                           number = 100,
+                           savePredictions = TRUE)
+
+set.seed(1000)
+# for k-folds CV
+
+reg.cv <-  
+  train(Trip_Count ~ start_station_name +  hour(interval60) + dotw + Temperature + Precipitation +
+          lagHour + lag2Hours +lag3Hours + lag12Hours + lag1day, 
+        data = bikenetsample,  
+        method = "lm",  
+        trControl = fitControl,  
+        na.action = na.pass)
+
+reg.cv
+
 ```
 
+# Distribution of Error
 ```{r plot: predicted vs observed}
 week_predictions %>% 
     mutate(interval60 = map(data, pull, interval60),
@@ -1530,7 +1520,6 @@ week_predictions %>%
        y="Predicted trips")+
   plotTheme
 ```
-
 
 ```{r map: spatial distribution of MAE}
 week_predictions %>% 
@@ -1566,11 +1555,6 @@ week_predictions %>%
 ```
 
 
-```{r comparison with kernel density}
-```
-
-
-#?
-##f. Provide additional maps and data visualizations to show that your model is useful.
+# Conclusion
 ##g. Talk about how your analysis meets the use case you set out to address.
 ##h. What could you do to make the analysis better?
