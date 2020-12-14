@@ -133,8 +133,8 @@ The idea behind our assortment of data is that the data from the ACS, CDC, and S
 ```{r wrangle data, cache=TRUE}
 
 ################Santa Monica Base################
-#SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
-SM_Base <- st_read("D:/Upenn/CPLN508/final project/12.14/EMS-Prediction/SMTracts") %>%
+SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
+#SM_Base <- st_read("D:/Upenn/CPLN508/final project/12.14/EMS-Prediction/SMTracts") %>%
   st_union() %>%
     st_transform('EPSG:2225')
 
@@ -337,13 +337,13 @@ filter(NAME == "Census Tract 7019.02, Los Angeles County, California") %>%
   st_centroid()
 
 #distance to bars
-bars <- st_read("D:/Upenn/CPLN508/final project/12.14/EMS-Prediction/bar.geojson")%>%
-#bars <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/bar.geojson") %>%
+#bars <- st_read("D:/Upenn/CPLN508/final project/12.14/EMS-Prediction/bar.geojson")%>%
+bars <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/bar.geojson") %>%
 st_transform(st_crs(fishnet))
 
 #intersection-not complete
-intersections <- st_read("D:/Upenn/CPLN508/final project/12.14/EMS-Prediction/intersection.geojson")%>%
-#intersections <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/intersection.geojson") %>%
+#intersections <- st_read("D:/Upenn/CPLN508/final project/12.14/EMS-Prediction/intersection.geojson")%>%
+intersections <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/intersection.geojson") %>%
 st_transform(st_crs(fishnet))
 
 #311 calls
@@ -673,7 +673,7 @@ ggplot() +
   labs(title = "2010-2020") +
   mapTheme(),
   ncol = 2,
-  top = "Observed EMS Call Density over 2020 vs last 10 years")
+  top = "Observed EMS Call Density in 2020 vs last 10 years")
 
 ```
 
@@ -715,7 +715,7 @@ To better understand the spatial distribution of EMS calls, we also analyze the 
 2. Service requests, trash complaints, violent crime, binge drinking, and bars are clustered in the downtown region, the biggest hotspot for EMS calls.  
 3. Cancer, heart disease, stroke, and median age surprisingly do not exhibit clear spatial patterns and do not appear correlated with EMS calls.
 
-```{r risk factor maps}
+```{r risk factor maps, fig.height=12, fig.width=15}
 #select features
 vars_net_select <- vars_net_tractData %>%
   dplyr::select(-uniqueID, -tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -pulmonaryDisease, -violentCrime.nn, -socialservice.nn, -intersection.nn, -diabetes, -trash.nn, -ZIPCODE)
