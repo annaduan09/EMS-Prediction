@@ -43,7 +43,7 @@ VB_Base <- st_read("https://opendata.arcgis.com/datasets/82ada480c5344220b278815
   st_union()
 
 #Fishnet
-fishnet <- 
+fishnet <-
   st_make_grid(VB_Base, cellsize = 500) %>%
   st_sf() %>%
   mutate(uniqueID = rownames(.))
@@ -114,8 +114,5 @@ genderRatio <- st_read("https://opendata.arcgis.com/datasets/0a71815ec61f4187844
   dplyr::select(maleRatio)
 
 
-  
+
 ```
-
-
-
