@@ -1,0 +1,20 @@
+name,diagnoseAsthma,notWorking,obese,diagnoseDiabetes,diagnoseHeartDisease,deoayedMedCare,uninsured
+"Census Tract 7012.01, Los Angeles County, California",0.147,0.442,0.101,0.048,0.075,0.213,0.049
+"Census Tract 7012.02, Los Angeles County, California",0.149,0.267,0.12,0.045,0.06,0.227,0.07
+"Census Tract 7013.02, Los Angeles County, California",0.151,0.218,0.098,0.048,0.05,0.301,0.07
+"Census Tract 7013.04, Los Angeles County, California",0.15,0.422,0.105,0.052,0.076,0.254,0.067
+"Census Tract 7014.02, Los Angeles County, California",0.14,0.354,0.12,0.061,0.063,0.255,0.07
+"Census Tract 7015.01, Los Angeles County, California",0.163,0.278,0.141,0.045,0.057,0.2,0.087
+"Census Tract 7015.02, Los Angeles County, California",0.164,0.363,0.152,0.06,0.063,0.192,0.098
+"Census Tract 7016.01, Los Angeles County, California",0.173,0.335,0.126,0.052,0.071,0.204,0.076
+"Census Tract 7016.02, Los Angeles County, California",0.174,0.281,0.164,0.058,0.057,0.198,0.13
+"Census Tract 7017.01, Los Angeles County, California",0.176,0.319,0.167,0.059,0.057,0.187,0.132
+"Census Tract 7017.02, Los Angeles County, California",0.132,0.263,0.175,0.088,0.049,0.263,0.087
+"Census Tract 7018.01, Los Angeles County, California",0.184,0.397,0.172,0.066,0.048,0.218,0.129
+"Census Tract 7018.02, Los Angeles County, California",0.171,0.417,0.188,0.071,0.047,0.236,0.11
+"Census Tract 7019.02, Los Angeles County, California",0.165,0.373,0.078,0.07,0.047,0.24,0.08
+"Census Tract 7020.02, Los Angeles County, California",0.158,0.336,0.148,0.06,0.055,0.239,0.096
+"Census Tract 7021.02, Los Angeles County, California",0.167,0.324,0.156,0.051,0.062,0.183,0.096
+"Census Tract 7022.01, Los Angeles County, California",0.167,0.279,0.158,0.059,0.058,0.19,0.103
+"Census Tract 7022.02, Los Angeles County, California",0.162,0.347,0.122,0.055,0.067,0.24,0.093
+"Census Tract 7023, Los Angeles County, California",0.146,0.306,0.131,0.067,0.066,0.261,0.104
