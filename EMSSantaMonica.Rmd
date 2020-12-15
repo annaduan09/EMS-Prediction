@@ -785,8 +785,8 @@ EMS_2020 %>%
 
 Figure XX shows Covid-19 cases in Santa Monica with a 14 day lag. This is because Covid-19 do not become symptomatic until 14 days after exposure, therefore any cases involved in an EMS call were contracted around two weeks prior. These numbers are relatively low until a peak in July. Cases begin to increase rapidly starting in November There doesn't appear to be a correlation with EMS calls, however. This may be because Santa Monica has relatively few cases of Covid-19 compared to its total EMS calls.
 ```{r covid cases / time}
-#covid <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/coronavirus.csv") %>%
-covid <- st_read("D:/Upenn/CPLN508/final project/12.14/EMS-Prediction/coronavirus.csv") %>%
+covid <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/coronavirus.csv") %>%
+#covid <- st_read("D:/Upenn/CPLN508/final project/12.14/EMS-Prediction/coronavirus.csv") %>%
   st_as_sf(coords = c("x", "y"), crs = 4326, agr = "constant") %>%
     st_transform('EPSG:2225') %>%
     mutate(date = as.POSIXct(date)) %>%
@@ -1025,7 +1025,7 @@ ggplot(EMS_18_20 %>%
          group_by(dotw) %>%
          tally())+
   geom_line(aes(x = dotw, y = n, group = 1))+
-  labs(title="Figure 4.2: EMS trips, Santa Monica, 2010-2020 by day of the week",
+  labs(title="EMS trips, Santa Monica, 2010-2020 by day of the week",
        x="Day", 
        y="Number of trips")+
   plotTheme()
@@ -1047,7 +1047,8 @@ EMS_18_20 %>%
   summarize(mean_trips = mean(n))%>%
   ggplot()+
   geom_histogram(aes(mean_trips), binwidth = 1)+
-  labs(title="Figure 4.2: Mean Number of Hourly Calls Per reporting district. Santa Monica, Nov, 2018",
+  labs(title="Mean Number of Hourly Calls",
+  subtitle="Santa Monica, Nov, 2018",
        x="Number of trips", 
        y="Frequency")+
   facet_wrap(~time_of_day)+
@@ -1074,7 +1075,7 @@ ggplot()+
   ylim(min(dat_net$latitude), max(dat_net$latitude))+
   xlim(min(dat_net$longitude), max(dat_net$longitude))+
   facet_grid(weekend ~ time_of_day)+
-  labs(title="Figure 4.5: EMS calls per hr by reporting district. Santa Monica, 2020")+
+  labs(title="EMS calls per hr by reporting district. Santa Monica, 2020")+
   mapTheme()
 ```
 
@@ -1236,7 +1237,6 @@ rbind(
 
 
 
-
 Table XX shows us in more detail correlations between EMS calls and lags. We see that the strongest correlation is with 30 and 45 minute lag. 
 ```{r Time Lag Tables}
 
@@ -1307,7 +1307,6 @@ anim_save("ems_local", EMS_animation, duration=60, renderer = gifski_renderer())
 
 # Linear Regression Models
 ```{r temporal model}
-
 
 #split data sets
 library(caret)
@@ -1385,9 +1384,9 @@ model_pred <- function(dat, fit){
 week_predictions <- 
   EMS.Test.weekNest %>% 
     mutate(Time = map(.x = data, fit = reg1_time, .f = model_pred),
-           Space = map(.x = data, fit = reg1_time, .f = model_pred),
-           Time_Space = map(.x = data, fit = reg1_time, .f = model_pred),
-           Time_Space_Lag = map(.x = data, fit = reg1_time, .f = model_pred),) %>%
+           Space = map(.x = data, fit = reg2_space, .f = model_pred),
+           Time_Space = map(.x = data, fit = reg3_time_space, .f = model_pred),
+           Time_Space_Lag = map(.x = data, fit = reg4_lag, .f = model_pred),) %>%
     gather(Regression, Prediction, -data, -Week) %>%
     mutate(Observed = map(data, pull, EMS_Count),
            Absolute_Error = map2(Observed, Prediction,  ~ abs(.x - .y)),
