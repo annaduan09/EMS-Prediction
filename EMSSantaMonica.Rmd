@@ -1367,15 +1367,15 @@ EMS.Test <- EMS.Test %>%
   rename(Week = week) 
 
 reg1_time <- 
-  lm(EMS_Count ~  hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed, data = EMSallTrain)
+  lm(EMS_Count ~  hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed, data = EMS.Train)
 
 reg2_space <- 
-  lm(EMS_Count ~ uniqueID + Violent_Crime + bar.nn + downtown.nn, data = EMSallTrain)
+  lm(EMS_Count ~ uniqueID + Violent_Crime + bar.nn + downtown.nn, data = EMS.Train)
   
 reg3_time_space <- 
-  lm(EMS_Count ~ hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed + uniqueID + Violent_Crime + bar.nn + downtown.nn, data = EMSallTrain)
+  lm(EMS_Count ~ hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed + uniqueID + Violent_Crime + bar.nn + downtown.nn, data = EMS.Train)
 
-reg4_lag <-   lm(EMS_Count ~ hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed + uniqueID + Violent_Crime + bar.nn + downtown.nn + lagHour + lag2Hours + lag4Hours + lag12Hours + lag1day, data = EMSallTrain)
+reg4_lag <-   lm(EMS_Count ~ hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed + uniqueID + Violent_Crime + bar.nn + downtown.nn + lagHour + lag2Hours + lag4Hours + lag12Hours + lag1day, data = EMS.Train)
 
 summary(reg4_lag)  
 ##add reportingz
@@ -1415,65 +1415,91 @@ week_predictions %>%
   dplyr::select(Week, Regression, MAE) %>%
   gather(Variable, MAE, -Regression, -Week) %>%
   ggplot(aes(Week, MAE)) + 
-    geom_bar(aes(fill = Regression, colour = Regression), position = "dodge", stat="identity") +
-  scale_fill_manual(aesthetics = "palette4") +
+    geom_bar(aes(fill = Regression), position = "dodge", stat="identity") +
+  scale_fill_manual(values = palette4) +
     labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
   plotTheme()
 #the mae is much lower when we use uniqueID instead of reporting-district
 
 
-#PLOT AGAINST ACTUAL SERIES
-#BC: can't fix this, I can't open week_predictions
-week_predictions.rd <- left_join(week_predictions, EMS_18_20, by="interval60")
-week_predictions <- week_predictions.rd %>% 
-    mutate(interval60 = map(data, pull, interval60),
-           reporting_district = map(data, pull, reporting_district)) %>%
-    dplyr::select(interval60, reporting_district, Observed, Prediction, Regression, Absolute_Error, sd_AE) %>%
-    unnest(cols = c(interval60, reporting_district, Observed, Prediction))
+#PLOT AGAINST ACTUAL SERIES - AD: I got this to work!
+week_predictions %>% 
+  mutate(interval60 = map(data, pull, interval60),
+         uniqueID = map(data, pull, uniqueID)) %>%
+  dplyr::select(interval60, uniqueID, Observed, Prediction, Regression) %>%
+  unnest() %>%
+  gather(Variable, Value, -Regression, -interval60, -uniqueID) %>%
+  group_by(Regression, Variable, interval60) %>%
+  summarize(Value = sum(Value)) %>%
+  ggplot(aes(interval60, Value, colour=Variable)) + 
+  geom_line(size = 1.1) + 
+  facet_wrap(~Regression, ncol=1) +
+  labs(title = "Predicted/Observed EMS Call time series", subtitle = "Santa Monica, CA",  x = "Hour", y= "EMS Calls") +
+  plotTheme()  
 
-week_predictions.twocol <-week_predictions %>%
+
+week_predictions.rd <- week_predictions %>%
+  mutate(interval60 = map(data, pull, interval60)) %>%
+  dplyr::select(interval60, Observed, Prediction, Regression, Absolute_Error, sd_AE, MAE) %>%
+  unnest() %>%
+  left_join(., EMS_18_20, by="interval60")
+
+
+week_predictions.rd_sample <- week_predictions.rd %>%
+  sample_n(., 40000)
+
+
+#AD: this is as far as I got.. my computer's ram is too low even though I made samples of everything..
+
+week_predictions.twocol <-week_predictions.rd_sample %>% #AD: running out of vector memory - not sure how to make this smaller
   left_join(., EMS_2020[,c("reporting_district", "latitude", "longitude")],by = "reporting_district") %>%
   filter(Regression == "Time_Space_FE_timeLags") %>% ##regresstion
   group_by(reporting_district) %>%
   summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))
 
-week_predictions <- left_join(week_predictions, week_predictions.twocol, by="reporting_district")
+week_predictions.rd_sample <- left_join(week_predictions.rd_sample, week_predictions.twocol, by="reporting_district")
 
-week_predictions.latlon <- left_join(week_predictions, EMS_2020[,c("reporting_district", "latitude", "longitude", "dotw", "week", "interval60")],by = "reporting_district")
+week_predictions.latlon <- left_join(week_predictions.rd_sample, EMS_2020[,c("reporting_district", "latitude", "longitude", "dotw", "week", "interval60")],by = "reporting_district")
+
+week_predictions.latlon_sample <- week_predictions.latlon %>%
+  sample_n(., 40000)
 
 ggplot()+
-  geom_sf(data = (SM_Base%>%
-    st_transform(st_crs(fishnet))), color = "grey", fill = "transparent")+
-  geom_point(data=week_predictions.latlon, aes(x = longitude, y = latitude, color = MAE), 
+  geom_sf(data = SM_Base, color = "grey", fill = "transparent") +
+  geom_point(data = week_predictions.latlon_sample, aes(x = longitude.x, y = latitude.x, color = MAE), 
              fill = "transparent", alpha = 0.4)+
   scale_colour_viridis(direction = -1,
   discrete = FALSE, option = "D")+
-#  ylim(min(dat_census$latitude), max(dat_census$latitude))+
-#  xlim(min(dat_census$longitude), max(dat_census$longitude))+
+  ylim(min(dat_net$latitude), max(dat_net$latitude))+
+  xlim(min(dat_net$longitude), max(dat_net$longitude))+
   labs(title="Figure 5.3: Mean Abs Error, Test Set, Model 4")+
   mapTheme()
 
-ggplot(dweek_predictions.twocol, aes(reporting_district, MAE)) +
-  geom_bar(stat = "identity") +
-    scale_fill_manual(values = palette5) +
-    labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
-  plotTheme()
+ggplot() +
+  geom_sf(data = SM_Base) +
+  mapTheme()
 
-week_predictions.latlon %>% 
-  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
-         time_of_day = case_when(hour(interval60.x) < 7 | hour(interval60.x) > 18 ~ "Overnight",
-                                 hour(interval60.x) >= 7 & hour(interval60.x) < 10 ~ "AM Rush",
-                                 hour(interval60.x) >= 10 & hour(interval60.x) < 15 ~ "Mid-Day",
-                                 hour(interval60.x) >= 15 & hour(interval60.x) <= 18 ~ "PM Rush"))%>%
-  ggplot()+
-  geom_point(aes(x= Observed, y = Prediction))+
-    geom_smooth(aes(x= Observed, y= Prediction), method = "lm", se = FALSE, color = "red")+
-    geom_abline(slope = 1, intercept = 0)+
-  facet_grid(time_of_day~weekend)+
-  labs(title="Figure 5.4: Observed vs Predicted",
-       x="Observed trips", 
-       y="Predicted trips")+
-  plotTheme()
+#ggplot(dweek_predictions.twocol, aes(reporting_district, MAE)) +
+#  geom_bar(stat = "identity") +
+#    scale_fill_manual(values = palette5) +
+#    labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
+#  plotTheme()
+
+#week_predictions.latlon %>% 
+#  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
+#         time_of_day = case_when(hour(interval60.x) < 7 | hour(interval60.x) > 18 ~ "Overnight",
+#                                 hour(interval60.x) >= 7 & hour(interval60.x) < 10 ~ "AM Rush",
+#                                 hour(interval60.x) >= 10 & hour(interval60.x) < 15 ~ "Mid-Day",
+#                                 hour(interval60.x) >= 15 & hour(interval60.x) <= 18 ~ "PM Rush"))%>%
+#  ggplot()+
+#  geom_point(aes(x= Observed, y = Prediction))+
+#    geom_smooth(aes(x= Observed, y= Prediction), method = "lm", se = FALSE, color = "red")+
+#    geom_abline(slope = 1, intercept = 0)+
+#  facet_grid(time_of_day~weekend)+
+#  labs(title="Figure 5.4: Observed vs Predicted",
+#       x="Observed trips", 
+#       y="Predicted trips")+
+#  plotTheme()
 
 ```
 
@@ -1481,9 +1507,9 @@ week_predictions.latlon %>%
 ```{r spatial validation}
 error.byWeek <-
   week_predictions.latlon%>%
-  dplyr::select(reporting_district, Absolute_Error, week) %>%
-  gather(Variable, Value, -reporting_district, -week) %>%
-    group_by(Variable, reporting_district, week) %>%
+  dplyr::select(reporting_district, Absolute_Error, Week) %>%
+  gather(Variable, Value, -reporting_district, -Week) %>%
+    group_by(Variable, reporting_district, Week) %>%
     summarize(MAE = mean(Value))
 
 error.byHour <-
@@ -1645,6 +1671,32 @@ error_by_reg_and_fold <-
 
 # Distribution of Error
 ```{r plot: predicted vs observed}
+#Error by fishnet cell
+week_predictions %>% 
+  mutate(interval60 = map(data, pull, interval60),
+         uniqueID = map(data, pull, uniqueID), 
+         uniqueID = map(data, pull, uniqueID), 
+         uniqueID = map(data, pull, start_station_longitude)) %>%
+  select(interval60, start_station_id, start_station_longitude, start_station_latitude, Observed, Prediction, Regression) %>%
+  unnest() %>%
+  filter(Regression == "DTime_Space_FE_timeLags") %>%
+  group_by(start_station_id, start_station_longitude, start_station_latitude) %>%
+  summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))%>%
+  ggplot(.)+
+  geom_sf(data = sfTracts %>%
+            st_transform(crs=4326), colour = '#efefef')+
+  geom_point(aes(x = start_station_longitude, y = start_station_latitude, color = MAE), 
+             fill = "transparent", alpha = 0.4)+
+  scale_colour_viridis(direction = -1,
+                       discrete = FALSE, option = "D")+
+  ylim(min(sfBike_census$start_station_latitude), max(sfBike_census$start_station_latitude))+
+  xlim(min(sfBike_census$start_station_longitude), max(sfBike_census$start_station_longitude))+
+  labs(title="Mean Abs Error, Test Set, Model 4")+
+  mapTheme()
+
+
+
+
 week_predictions %>% 
     mutate(interval60 = map(data, pull, interval60),
            start_station = map(data, pull, start_station), 
