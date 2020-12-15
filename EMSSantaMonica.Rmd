@@ -33,6 +33,7 @@ library(mapview)
 library(devtools)
 library(lubridate)
 library(dplyr)
+library(fastDummies)
 
 options(scipen=999)
 options(tigris_class = "sf")
@@ -512,7 +513,7 @@ mapList <- list()
 ```
 
 
-# Exploratory Analysis
+# Data Exploration
 To begin our analysis, we wrangle EMS call data to understand the spatial trends in EMS call and response over time.
 ```{r EMS incidents, cache=TRUE, message=FALSE, warning=FALSE, include=TRUE, results='hide'}
 #EMS
@@ -643,7 +644,6 @@ EMS_net.response.emg <-
          cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
 ```
 
-
 In Figure XX, we see that Santa Monica's EMS calls come primarily from the downtown and midtown regions, where most tourist attractions are situated. This is expected, as studies have found that emergencies are most likely to occur in places with high daytime populations. With greater distance from downtown, EMS incidents become less frequent. Out of curiosity, we tested whether these patterns have been consistent in recent years, and found that the hot-spots have remained the same.
 
 ```{r EMS Call Density Map, message=FALSE, warning=FALSE, results='hide'}
@@ -766,9 +766,10 @@ ggplot(correlation.long, aes(Value, countEMS)) +
   plotTheme()
 ```
 
-What about the temporal risk factors for EMS incidents? First, we visualize the incidence of EMS calls over the past year. It appears that calls peak in spring, drop during the summer, and pick up again in fall. 
+What about the temporal risk factors for EMS incidents? First, we visualize the incidence of EMS calls over the past year. It appears that calls peak in spring, drop during the summer, and pick up again in fall. Figure XX then shows a two-week range in April, 2019. Here, we see that demand is highest at the start of both weeks, and drops for the rest of the week and the weekend.
 ```{r ems call / time plot, message=FALSE, warning=FALSE, results='hide'}
-EMS_2020 %>%
+# weekly
+EMS_18_20 %>%
   mutate(count = 1) %>%
     group_by(incident_date) %>% 
       summarize(EMS_Count = sum(count)) %>%
@@ -780,9 +781,102 @@ EMS_2020 %>%
              subtitle="Santa Monica, CA", 
              x="Day", y="EMS Count") +
         plotTheme() + theme(panel.grid.major = element_blank())   
+
+# hourly - can see a peak on Monday both weeks
+ggplot(EMS_18_20 %>%
+         filter(interval60 >= as.POSIXct('2019-4-1') &
+     interval60 <= as.POSIXct('2019-4-14')
+     ) %>%
+         group_by(interval60) %>%
+         tally())+
+  geom_line(aes(x = interval60, y = n))+
+  labs(title="EMS Calls per hr,\n Santa Monica, April 2019",
+       x="Week", 
+       y="Number of trips")+
+  plotTheme()
 ```
 
+Next, we examine in greater detail when EMS calls occur. Figure XX shows that they are most frequent on weekdays, and that it first peaks at 1am, then at 1pm and 3pm respectively on weekdays and weekends. Additionally, cases peak on Monday.
+```{r calls / time of day, fig.height=10, fig.width=18, message=FALSE, warning=FALSE, results='hide'}
+grid.arrange(
+ggplot(EMS_18_20 %>% mutate(hour = hour(interval60)))+
+     geom_freqpoly(aes(hour, color = dotw), binwidth = 1)+
+  labs(title="Day of Week",
+       x="Hour", 
+       y="EMS Calls")+
+     plotTheme(),
+ggplot(EMS_18_20 %>% 
+         mutate(hour = hour(received),
+                weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday")))+
+     geom_freqpoly(aes(hour, color = weekend), binwidth = 1)+
+  labs(title="Weekend vs Weekday, 2020",
+       x="Hour", 
+       y="Trip Counts")+
+     plotTheme(),
+ncol=2,
+top = "EMS Calls by Day of Week, 2018-2020")
+
+ggplot(EMS_18_20 %>%
+         group_by(dotw) %>%
+         tally())+
+  geom_line(aes(x = dotw, y = n, group = 1))+
+  labs(title="EMS trips, Santa Monica, 2010-2020 by day of the week",
+       x="Day", 
+       y="Number of trips")+
+  plotTheme()
+```
+
+What about the relationship between EMS and rush hour? These are times where more people are outside, and therefore there may be more traffic and other accidents. Overall, call volume is similar across each rush period, although it is slightly lower in the morning rush. Figure XX shows that during weekdays, there is a substantial surge in EMS calls in the downtown area during the overnight period. This is contrary to our expectations, as we expected that nightlife is more significant during the weekend, leading to more weekend nighttime EMS calls.
+```{r EMS call / AM PM Rush, message=FALSE, warning=FALSE, results='hide'}
+
+####AM/PM Rushes####
+EMS_18_20 %>% 
+         mutate(time_of_day = case_when(hour(interval60) < 5 | hour(interval60) > 20 ~ "Overnight",
+                                 hour(interval60) >= 5 & hour(interval60) < 10 ~ "AM Rush",
+                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
+                                 hour(interval60) >= 15 & hour(interval60) <= 20 ~ "PM Rush"))%>%
+         group_by(interval60, reporting_district, time_of_day) %>%
+         tally()%>%
+  group_by(time_of_day, reporting_district,)%>%
+  summarize(mean_trips = mean(n))%>%
+  ggplot()+
+  geom_histogram(aes(mean_trips), binwidth = 1)+
+  labs(title="Mean Number of Hourly Calls",
+  subtitle="Santa Monica, Nov, 2018",
+       x="Number of trips", 
+       y="Frequency")+
+  facet_wrap(~time_of_day)+
+  plotTheme()
+
+
+#origin map      #AD: why is this map rotated 90 degrees?
+ggplot()+
+  geom_sf(data = ACSTracts%>%
+          st_transform(crs=4326), fill = "white")+
+  geom_point(data = dat_net %>% 
+            mutate(hour = hour(received),
+                weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
+                time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
+                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
+                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
+                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush"))%>%
+              group_by(reporting_district, latitude, longitude, weekend, time_of_day) %>%
+              tally(),
+            aes(x=longitude, y = latitude, color = n), 
+            fill = "transparent", alpha = 0.4, size = 1)+
+  scale_colour_viridis(direction = -1,
+  discrete = FALSE, option = "C")+
+  ylim(min(dat_net$latitude), max(dat_net$latitude))+
+  xlim(min(dat_net$longitude), max(dat_net$longitude))+
+  facet_grid(weekend ~ time_of_day)+
+  labs(title="EMS calls per hr by reporting district. Santa Monica, 2020")+
+  mapTheme()
+```
+
+
 Figure XX shows Covid-19 cases in Santa Monica with a 14 day lag. This is because Covid-19 do not become symptomatic until 14 days after exposure, therefore any cases involved in an EMS call were contracted around two weeks prior. These numbers are relatively low until a peak in July. Cases begin to increase rapidly starting in November There doesn't appear to be a correlation with EMS calls, however. This may be because Santa Monica has relatively few cases of Covid-19 compared to its total EMS calls.
+
+
 ```{r covid cases / time plot, message=FALSE, warning=FALSE, results='hide'}
 covid <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/coronavirus.csv") %>%
 #covid <- st_read("D:/Upenn/CPLN508/final project/12.14/EMS-Prediction/coronavirus.csv") %>%
@@ -813,7 +907,10 @@ top = "Covid-19 Cases and 14-day Lag, 2020"
 )
 ```
 
+
 Figure XX displays weather conditions. In Santa Monica, the average income and health is relatively high, therefore making diabetes and violent crime less relevant to our analysis. Rather, we look to other accidents, including motor accidents. One of the key temporal predictors of traffic accidents is weather, therefore we visualize weather conditions. As it turns out, wind speed, wind gust, and precipitation appear slightly correlated with EMS calls. 
+
+
 ```{r weather conditions/time plot, fig.height=20, fig.width=8, message=FALSE, warning=FALSE, results='hide'}
 library(ggplot2)
 library(gridExtra)
@@ -833,6 +930,7 @@ grid.arrange(
   ncol=1)
 ```
 
+
 # Study Panels  
 The next step in this analysis is to create space/time panels of temporal and spatial features for each unique space/time unit pair. 
 
@@ -842,6 +940,7 @@ ACSTracts <- ACSTracts %>%
           st_transform(crs=4326) %>%
   st_as_sf() %>%
   st_transform(st_crs(fishnet))
+
 panel_net <- final_net %>%
   dplyr::select(-tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -uninsured, -cancer, -asthma, -heartDisease, -pulmonaryDisease, -clinicalServicesWomen65, -diabetes, -smoking, -poorMentalHealth, -obese, -stroke, -median_age, -medHHInc, -pctVacant, -violentCrime.nn, -trash.nn, -socialservice.nn, -intersection.nn)
 
@@ -936,7 +1035,6 @@ study.panel.15 <-
   mutate(week = week(interval15),
          dotw = wday(interval15, label = TRUE))
 
-
 study.panel <- 
   study.panel %>% 
   arrange(uniqueID, interval60) %>% 
@@ -960,8 +1058,9 @@ study.panel.rd <-
    mutate(day = yday(interval60))
 ```
 
-
 This new study panel allows us to look at EMS calls' correlation with holidays. On these days, there is expected to be a higher density of people outdoors celebrating and likely more injuries as well. To do this, we identify a few of the holidays where Americans consume the most alcohol, and plot them against EMS calls. From Figure XX, it appears that ___, ___, and ____ do align with peaks in demand.
+
+
 ```{r plot: holiday effect, message=FALSE, warning=FALSE, results='hide'}
 ################Holidays################
 mondays <- #for refernece in the graphic
@@ -1007,83 +1106,6 @@ holidayPlot %>%
         plotTheme() + theme(panel.grid.major = element_blank())
 ```
 
-Next, we examine in greater detail when EMS calls themselves occur. Figure XX shows that they are most frequent on weekdays, and that it first peaks at 1am, then at 12:30pm and 3pm respectively on weekdays and weekends. Additionally, cases peak on Monday.
-```{r calls / time of day, fig.height=10, fig.width=18, message=FALSE, warning=FALSE, results='hide'}
-grid.arrange(
-ggplot(EMS_18_20 %>% mutate(hour = hour(interval60)))+
-     geom_freqpoly(aes(hour, color = dotw), binwidth = 1)+
-  labs(title="Day of Week",
-       x="Hour", 
-       y="EMS Calls")+
-     plotTheme(),
-ggplot(EMS_18_20 %>% 
-         mutate(hour = hour(received),
-                weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday")))+
-     geom_freqpoly(aes(hour, color = weekend), binwidth = 1)+
-  labs(title="Weekend vs Weekday, 2020",
-       x="Hour", 
-       y="Trip Counts")+
-     plotTheme(),
-ncol=2,
-top = "EMS Calls by Day of Week, 2018-2020")
-
-ggplot(EMS_18_20 %>%
-         group_by(dotw) %>%
-         tally())+
-  geom_line(aes(x = dotw, y = n, group = 1))+
-  labs(title="EMS trips, Santa Monica, 2010-2020 by day of the week",
-       x="Day", 
-       y="Number of trips")+
-  plotTheme()
-
-```
-
-What about the relationship between EMS and rush hour? These are times where more people are outside, and therefore there may be more traffic and other accidents. Overall, call volume is similar across each rush period, although it is slightly lower in the morning rush. Figure XX shows that during weekdays, there is a substantial surge in EMS calls in the downtown area during the overnight period. This is contrary to our expectations, as we expected that nightlife is more signficant during the weekend, leading to more weekend nighttime EMS calls.
-```{r EMS call / AM PM Rush, message=FALSE, warning=FALSE, results='hide'}
-
-####AM/PM Rushes####
-EMS_18_20 %>% 
-         mutate(time_of_day = case_when(hour(interval60) < 5 | hour(interval60) > 20 ~ "Overnight",
-                                 hour(interval60) >= 5 & hour(interval60) < 10 ~ "AM Rush",
-                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
-                                 hour(interval60) >= 15 & hour(interval60) <= 20 ~ "PM Rush"))%>%
-         group_by(interval60, reporting_district, time_of_day) %>%
-         tally()%>%
-  group_by(time_of_day, reporting_district,)%>%
-  summarize(mean_trips = mean(n))%>%
-  ggplot()+
-  geom_histogram(aes(mean_trips), binwidth = 1)+
-  labs(title="Mean Number of Hourly Calls",
-  subtitle="Santa Monica, Nov, 2018",
-       x="Number of trips", 
-       y="Frequency")+
-  facet_wrap(~time_of_day)+
-  plotTheme()
-
-
-#origin map      #AD: why is this map rotated 90 degrees?
-ggplot()+
-  geom_sf(data = ACSTracts%>%
-          st_transform(crs=4326), fill = "white")+
-  geom_point(data = dat_net %>% 
-            mutate(hour = hour(received),
-                weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
-                time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
-                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
-                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
-                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush"))%>%
-              group_by(reporting_district, latitude, longitude, weekend, time_of_day) %>%
-              tally(),
-            aes(x=longitude, y = latitude, color = n), 
-            fill = "transparent", alpha = 0.4, size = 1)+
-  scale_colour_viridis(direction = -1,
-  discrete = FALSE, option = "C")+
-  ylim(min(dat_net$latitude), max(dat_net$latitude))+
-  xlim(min(dat_net$longitude), max(dat_net$longitude))+
-  facet_grid(weekend ~ time_of_day)+
-  labs(title="EMS calls per hr by reporting district. Santa Monica, 2020")+
-  mapTheme()
-```
 
 # EMS Call Hotspots 
 With an idea of where and when EMS calls occur, we now use a Local Moran's I statistic to identify statistically significant spatial hotspots for EMS calls. Next, we use a Local Moran's I statistic to identify statistically significant hot spots for EMS calls in Santa Monica. Using this method, we find areas where the clustering of EMS calls is greater than it would be if they were randomly distributed. In Figure XX, we see that of the fishnet grids with high rates of EMS calls, only some of them have high clustering (Moran's I). Next, we use the p-value of the Moran's I value to identify areas with high clustering that also have a high confidence level in their Moran's I. This leaves us with two distinct hot spots in Santa Monica: one in the downtown area, and one in Midtown.These hotspots make sense: the downtown area has a beach, the Santa Monica pier, and Muscle Beach, three locations with high daytime occupancy and high risk for accidents. 
@@ -1135,9 +1157,11 @@ final_net <-
 ```
 
 # Feature Engineering  
-We now engineer a new feature: temporal lag, which lets us examine temporal correlation in EMS calls. For instance, lagHour is the number of EMS calls in the past hour. In Figure XX, we see that 15 minute lag appears to correlate with EMS count. 
-```{r Time Exploration: panels + time lags, message=FALSE, warning=FALSE, results='hide'}
+With this new information, we will engineer several new features. We already have ample spatial features such as distance to downtown, average distance to the three closest bars, and distance to hotspots. Now, we will add spatial features: lag, isHoliday, isWeekend, isWeekday, isPeakHour, and isSpring.
 
+## Temporal Lag
+Temporal lag lets us examine temporal correlation in EMS calls. For instance, lagHour is the number of EMS calls in the past hour. In Figure XX, we see that 15 minute lag appears to correlate with EMS count. 
+```{r Make time lags, message=FALSE, warning=FALSE, results='hide'}
 #lagHour / EMS Count plot
 cor_lag <- na.omit(study.panel.rd[, c("interval60","reporting_district","EMS_Count", "lagHour")])
 #plot(cor_lag$EMS_Count, cor_lag$lagHour)
@@ -1240,7 +1264,6 @@ rbind(
 
 ``` 
 
-
 Table XX shows us in more detail correlations between EMS calls and lags. We see that the strongest correlation is with 30 and 45 minute lag. 
 ```{r Time Lag Tables, message=FALSE, warning=FALSE}
 
@@ -1267,46 +1290,62 @@ as.data.frame(na.omit(study.panel.15)) %>%
 
 ```
 
+## Other Temporal Features
+We now engineer features for peak hours, weekends, and the most festive, boozy holidays in the United States. These are Thanksgiving Eve, Christmas Eve, New Year's, 4th of July, Mardi Gras, Labor Day, Cinco de Mayo, Halloween, and Saint Patrick's Day. 
+```{r feature engineering, message=FALSE, warning=FALSE, include=TRUE, results='hide'}
+
+holidays <- c("2020-11-26", "2020-12-24", "2020-01-01", "2020-07-04", "2020-02-25", "2020-09-07", "2020-05-05", "2020-10-31", "2020-03-17")
+              
+study.panel <- 
+  study.panel %>% 
+  mutate(is1 = grepl("13:00:00", as.character(interval60), fixed = TRUE),
+         is3 = grepl("15:00:00", as.character(interval60), fixed = TRUE),
+         isPeakHour = ifelse(is1 == "TRUE" | is3 == "TRUE", 1, 0),
+         isWeekend = ifelse(dotw == "Sun" | dotw == "Sat", 1, 0),
+         isHoliday = ifelse(substring(as.character(interval60), 1, 10) %in% holidays, 1, 0))
+```
+
+
 
 ```{r animation, message=FALSE, warning=FALSE, results='hide'}
-week20 <-
-  filter(EMS_18_20.sf, week == 20)
+#week20 <-
+#  filter(EMS_18_20.sf, week == 20)
 
-week20.panel <-
-  expand.grid(
-    interval4h = unique(week20$interval4h),
-    reporting_district = unique(EMS_18_20.sf$reporting_district))
+#week20.panel <-
+#  expand.grid(
+#    interval4h = unique(week20$interval4h),
+#    reporting_district = unique(EMS_18_20.sf$reporting_district))
 
-ems.animation.data <-
-  mutate(week20, Trip_Counter = 1) %>%
-    right_join(week20.panel) %>% 
-    group_by(interval4h, reporting_district) %>%
-    summarize(Trip_Count = sum(Trip_Counter, na.rm=T)) %>% 
-    ungroup() %>% 
-    st_sf() %>%
-    mutate(Trips = case_when(Trip_Count == 0 ~ "0 trips",
-                             Trip_Count == 1 ~ "1 trips",
-                             Trip_Count == 2 ~ "2 trips",
-                             Trip_Count == 3 ~ "3 trips",
-                             Trip_Count == 4 ~ "4 trips")) %>%
-    mutate(Trips = fct_relevel(Trips, "0 trips","1 trips","2 trips","3 trips", "4 trips"))
+#ems.animation.data <-
+#  mutate(week20, Trip_Counter = 1) %>%
+#    right_join(week20.panel) %>% 
+#    group_by(interval4h, reporting_district) %>%
+#    summarize(Trip_Count = sum(Trip_Counter, na.rm=T)) %>% 
+#    ungroup() %>% 
+#    st_sf() %>%
+#    mutate(Trips = case_when(Trip_Count == 0 ~ "0 trips",
+#                             Trip_Count == 1 ~ "1 trips",
+#                             Trip_Count == 2 ~ "2 trips",
+#                             Trip_Count == 3 ~ "3 trips",
+#                             Trip_Count == 4 ~ "4 trips")) %>%
+#    mutate(Trips = fct_relevel(Trips, "0 trips","1 trips","2 trips","3 trips", "4 trips"))
 
 
-library(gganimate)
-library(gifski)
-EMS_animation <-
-  ggplot() +
-    geom_sf(data = ems.animation.data, aes(col = Trips, size = Trips), show.legend = "point")+
-    geom_sf(data = ACS, color = "grey", fill = "transparent")+
-    scale_fill_manual(values = c("green", "yellow", "orange","red")) +
-    labs(title = "Figure 4.6: EMS calls for one week in May 2020",
-         subtitle = "4 hour intervals: {current_frame}") +
-    transition_manual(interval4h) +
-    mapTheme()
+#library(gganimate)
+#library(gifski)
+#EMS_animation <-
+#  ggplot() +
+#    geom_sf(data = ems.animation.data, aes(col = Trips, size = Trips), show.legend = "point")+
+#    geom_sf(data = ACS, color = "grey", fill = "transparent")+
+#    scale_fill_manual(values = c("green", "yellow", "orange","red")) +
+#    labs(title = "Figure 4.6: EMS calls for one week in May 2020",
+#         subtitle = "4 hour intervals: {current_frame}") +
+#    transition_manual(interval4h) +
+#    mapTheme()
 
-animate(EMS_animation, duration=60, fps=50, renderer = gifski_renderer())
+#animate(EMS_animation, duration=60, fps=50, renderer = gifski_renderer())
 
-anim_save("ems_local", EMS_animation, duration=60, renderer = gifski_renderer())
+#anim_save("ems_local", EMS_animation, duration=60, renderer = gifski_renderer())
 ```
 
 # Linear Regression Models
