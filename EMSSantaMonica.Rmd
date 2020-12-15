@@ -2,19 +2,18 @@
 title: "Santa Monica Spatiotemporal EMS Call Prediction"
 author: "Anna Duan, Bingchu Chen"
 date: "12/08/2020"
-output: html_document
 output:
   html_document:
     toc: true
     toc_float: true
     code_folding: hide
 ---
-#Motivation
+# Introduction  
 In the work of Emergency Medical Services (EMS), response time is everything. When responding to EMS calls for conditions such as cardiac arrest or stroke, minutes can be the difference between life and death. Over the past year, the COVID-19 pandemic has pushed the efficiency and function of EMS around the country to the limit. Surges in EMS demand have caused ambulance delays and shortages, the process of taking COVID-related protective measures such as donning personal protective equipment has increased response times, and in Los Angeles County, paramedics were ordered to [delay transporting cardiac arrest patients](https://www.latimes.com/california/story/2020-04-04/l-a-county-911-patients-hospital-coronavirus) to the hospital until 5 minutes after they are revived in order to optimize use of limited ambulance and emergency room capacity.
 
 In this environment, increasing the efficiency of ambulance response is critical to minimize the number of lives lost. To do this, we decided to use EMS call data to create a spatiotemporal predictive model for forecasting future calls. We decided to perform this analysis in Santa Monica, California because it has a wealth of EMS call data that reaches back to 2009 and is updated daily. As it is, Santa Monica dispatches ambulances from its network of fire stations and a private contractor as EMS calls are received. We propose to design an algorithm which forecasts the spatiotemporal patterns of EMS demand so that paramedics can arrive at predicted hotspots before emergencies occur. As Santa Monica's COVID cases climb, nearly filling its intensive care units and infecting ambulance and hospital staff, we believe that a more data-driven approach to ambulance dispatch can help reduce strain on the medical system.
 
-```{r load packages, message=FALSE, warning=FALSE, include=TRUE, results='hide', cache=TRUE}
+```{r setup, message=FALSE, warning=FALSE, include=TRUE, results='hide'}
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 options(scipen=10000000)
 library(tidyverse)
@@ -125,12 +124,12 @@ nn_function <- function(measureFrom,measureTo,k) {
 ```
 
 
-#Data and Methods
+# Data and Methods
 For this model, we primarily use data from Santa Monica's Fire Calls for Service dataset, filtered for EMS calls. We additionally use tract-level demographic data from the American Community Survey (ACS),  environmental and city services data from Santa Monica's Open Data Portal, and tract-level health outcome data from the Center for Disease Control (CDC). For the temporal aspect of the model, we use weather data from the Iowa Environment Mesonet and city-wide COVID-19 case counts. 
 
 The idea behind our assortment of data is that the data from the ACS, CDC, and Santa Monica will inform the spatial element of our prediction, as we downloaded data about health, socioeconomic conditions, employment, and the physical environment, all of which are correlated to EMS calls and medical emergencies in the literature. Our use of EMS call, weather, and COVID-19 data contribute to the temporal part of this model, as they generate past experience about when EMS calls occur to train our model.
 
-```{r wrangle data, cache=TRUE}
+```{r wrangle data, cache=TRUE, message=FALSE, warning=FALSE, include=TRUE, results='hide'}
 
 ################Santa Monica Base################
 SM_Base <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/SMTracts") %>%
@@ -515,7 +514,7 @@ mapList <- list()
 
 # Exploratory Analysis
 To begin our analysis, we wrangle EMS call data to understand the spatial trends in EMS call and response over time.
-```{r EMS incidents, cache=TRUE}
+```{r EMS incidents, cache=TRUE, message=FALSE, warning=FALSE, include=TRUE, results='hide'}
 #EMS
 EMS <- read.socrata("https://data.smgov.net/Public-Safety/Fire-Calls-for-Service/5y3u-5db4?call_type_description=Emergency Medical Service (EMS)")%>% 
 dplyr::select (-census_block_2010_geoid, -census_tract_2010_geoid, -census_block_2000_geoid, -census_tract_2000_geoid, -incident_number, -call_type_description, -location, -disposition)
@@ -647,7 +646,7 @@ EMS_net.response.emg <-
 
 In Figure XX, we see that Santa Monica's EMS calls come primarily from the downtown and midtown regions, where most tourist attractions are situated. This is expected, as studies have found that emergencies are most likely to occur in places with high daytime populations. With greater distance from downtown, EMS incidents become less frequent. Out of curiosity, we tested whether these patterns have been consistent in recent years, and found that the hot-spots have remained the same.
 
-```{r EMS Call Density Map}
+```{r EMS Call Density Map, message=FALSE, warning=FALSE, results='hide'}
 #Map of 2018-2020 and 2010-2020 call density 
 grid.arrange(
   ggplot() + 
@@ -678,7 +677,7 @@ ggplot() +
 ```
 
 What about response times? We would expect that due to the pandemic, response times may be slower due to increased demand. However, it turns out that average response times in 2020 were lower than the average response time over the past 10 years. This may indicate higher efficiency, however it's also possible that the fear of COVID-19 infection is [deterring people](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7318958/) from calling ambulances for non-COVID emergencies such as heart attacks. That is not good. Additionally, while response times have decreased, they are still relatively high: in 2020, the mean response time was 29 minutes, more than 6x the length of the standard set by the National Fire Protection Association.
-```{r EMS Response Time Map}
+```{r EMS Response Time Map, message=FALSE, warning=FALSE, results='hide'}
 #Map of 2020 and 2010-2020 response times
 resp_2020<-
   ggplot() +
@@ -715,7 +714,7 @@ To better understand the spatial distribution of EMS calls, we also analyze the 
 2. Service requests, trash complaints, violent crime, binge drinking, and bars are clustered in the downtown region, the biggest hotspot for EMS calls.  
 3. Cancer, heart disease, stroke, and median age surprisingly do not exhibit clear spatial patterns and do not appear correlated with EMS calls.
 
-```{r risk factor maps, fig.height=12, fig.width=15}
+```{r risk factor maps, message=FALSE, warning=FALSE, results='hide', fig.height=12, fig.width=15}
 #select features
 vars_net_select <- vars_net_tractData %>%
   dplyr::select(-uniqueID, -tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -pulmonaryDisease, -violentCrime.nn, -socialservice.nn, -intersection.nn, -diabetes, -trash.nn, -ZIPCODE)
@@ -744,7 +743,7 @@ do.call(grid.arrange,c(mapList, ncol = 5, top = "Risk Factors by Fishnet"))
 
 To verify these correlations with EMS calls, we plot EMS calls as a function of these risk factors. The results verify our suspicions: the most correlated spatial risk factors are violent crime, 311 service requests, downtown, trash complaints, distance to nearest bar, binge drinking, median income, and poverty.
 
-```{r risk factor scatterplots}
+```{r risk factor scatterplots, fig.height=16, fig.width=12, message=FALSE, warning=FALSE, results='hide'}
 ################Risk Factor Scatterplots########################
 correlation.long <-
   st_drop_geometry(final_net) %>%
@@ -768,7 +767,7 @@ ggplot(correlation.long, aes(Value, countEMS)) +
 ```
 
 What about the temporal risk factors for EMS incidents? First, we visualize the incidence of EMS calls over the past year. It appears that calls peak in spring, drop during the summer, and pick up again in fall. 
-```{r ems call / time}
+```{r ems call / time plot, message=FALSE, warning=FALSE, results='hide'}
 EMS_2020 %>%
   mutate(count = 1) %>%
     group_by(incident_date) %>% 
@@ -784,7 +783,7 @@ EMS_2020 %>%
 ```
 
 Figure XX shows Covid-19 cases in Santa Monica with a 14 day lag. This is because Covid-19 do not become symptomatic until 14 days after exposure, therefore any cases involved in an EMS call were contracted around two weeks prior. These numbers are relatively low until a peak in July. Cases begin to increase rapidly starting in November There doesn't appear to be a correlation with EMS calls, however. This may be because Santa Monica has relatively few cases of Covid-19 compared to its total EMS calls.
-```{r covid cases / time}
+```{r covid cases / time plot, message=FALSE, warning=FALSE, results='hide'}
 covid <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/coronavirus.csv") %>%
 #covid <- st_read("D:/Upenn/CPLN508/final project/12.14/EMS-Prediction/coronavirus.csv") %>%
   st_as_sf(coords = c("x", "y"), crs = 4326, agr = "constant") %>%
@@ -815,7 +814,7 @@ top = "Covid-19 Cases and 14-day Lag, 2020"
 ```
 
 Figure XX displays weather conditions. In Santa Monica, the average income and health is relatively high, therefore making diabetes and violent crime less relevant to our analysis. Rather, we look to other accidents, including motor accidents. One of the key temporal predictors of traffic accidents is weather, therefore we visualize weather conditions. As it turns out, wind speed, wind gust, and precipitation appear slightly correlated with EMS calls. 
-```{r weather conditions/time}
+```{r weather conditions/time plot, fig.height=20, fig.width=8, message=FALSE, warning=FALSE, results='hide'}
 library(ggplot2)
 library(gridExtra)
 #vsby: visibility; sknt:wind speed; gust:wind gust in knots
@@ -830,11 +829,14 @@ grid.arrange(
     labs(title="Visibility", x="Month", y="visibility") + plotTheme(),
   ggplot(weather.Panel, aes(interval60,wind_gust)) + geom_line() + 
     labs(title="Wind Gust in Knots", x="Month", y="wind gust") + plotTheme(),
-  top="Weather Data, 2020 - Santa Monica, CA")
+  top="Weather Data, 2020 - Santa Monica, CA",
+  ncol=1)
 ```
 
-We also look to holidays. On these days, there is expected to be a higher density of people outdoors celebrating and likely more injuries as well. To do this, we identify a few of the holidays where Americans consume the most alcohol, and plot them against EMS calls. From Figure XX, it appears that ___, ___, and ____ do align with peaks in demand.
-```{r EMS calls / Holidays}
+# Study Panels  
+The next step in this analysis is to create space/time panels of temporal and spatial features for each unique space/time unit pair. 
+
+```{r EMS calls / Holidays, message=FALSE, warning=FALSE, include=TRUE, results='hide'}
 library(dplyr)
 ACSTracts <- ACSTracts %>%
           st_transform(crs=4326) %>%
@@ -956,6 +958,11 @@ study.panel.rd <-
          lag12Hours = dplyr::lag(EMS_Count,12),
          lag1day = dplyr::lag(EMS_Count,24)) %>% 
    mutate(day = yday(interval60))
+```
+
+
+This new study panel allows us to look at EMS calls' correlation with holidays. On these days, there is expected to be a higher density of people outdoors celebrating and likely more injuries as well. To do this, we identify a few of the holidays where Americans consume the most alcohol, and plot them against EMS calls. From Figure XX, it appears that ___, ___, and ____ do align with peaks in demand.
+```{r plot: holiday effect, message=FALSE, warning=FALSE, results='hide'}
 ################Holidays################
 mondays <- #for refernece in the graphic
   mutate(study.panel,
@@ -1001,8 +1008,7 @@ holidayPlot %>%
 ```
 
 Next, we examine in greater detail when EMS calls themselves occur. Figure XX shows that they are most frequent on weekdays, and that it first peaks at 1am, then at 12:30pm and 3pm respectively on weekdays and weekends. Additionally, cases peak on Monday.
-```{r calls / time of day}
-
+```{r calls / time of day, fig.height=10, fig.width=18, message=FALSE, warning=FALSE, results='hide'}
 grid.arrange(
 ggplot(EMS_18_20 %>% mutate(hour = hour(interval60)))+
      geom_freqpoly(aes(hour, color = dotw), binwidth = 1)+
@@ -1033,7 +1039,7 @@ ggplot(EMS_18_20 %>%
 ```
 
 What about the relationship between EMS and rush hour? These are times where more people are outside, and therefore there may be more traffic and other accidents. Overall, call volume is similar across each rush period, although it is slightly lower in the morning rush. Figure XX shows that during weekdays, there is a substantial surge in EMS calls in the downtown area during the overnight period. This is contrary to our expectations, as we expected that nightlife is more signficant during the weekend, leading to more weekend nighttime EMS calls.
-```{r EMS call / AM PM Rush}
+```{r EMS call / AM PM Rush, message=FALSE, warning=FALSE, results='hide'}
 
 ####AM/PM Rushes####
 EMS_18_20 %>% 
@@ -1082,7 +1088,7 @@ ggplot()+
 # EMS Call Hotspots 
 With an idea of where and when EMS calls occur, we now use a Local Moran's I statistic to identify statistically significant spatial hotspots for EMS calls. Next, we use a Local Moran's I statistic to identify statistically significant hot spots for EMS calls in Santa Monica. Using this method, we find areas where the clustering of EMS calls is greater than it would be if they were randomly distributed. In Figure XX, we see that of the fishnet grids with high rates of EMS calls, only some of them have high clustering (Moran's I). Next, we use the p-value of the Moran's I value to identify areas with high clustering that also have a high confidence level in their Moran's I. This leaves us with two distinct hot spots in Santa Monica: one in the downtown area, and one in Midtown.These hotspots make sense: the downtown area has a beach, the Santa Monica pier, and Muscle Beach, three locations with high daytime occupancy and high risk for accidents. 
 
-```{r Local Moran's: Identify hotspots + add isSig features}
+```{r Maps/plot: Local Morans: Identify hotspots + add isSig features, message=FALSE, warning=FALSE, results='hide'}
 
 ##Prepare for moran's
 library(spdep)
@@ -1128,16 +1134,16 @@ final_net <-
                          filter(final_net, EMS.isSig == 1))), 1))
 ```
 
-# Study Panels  
-The next step in this analysis is to create space/time panels of temporal and spatial features for each unique space/time unit pair. We now engineer a new features: temporal lag, which lets us examine temporal correlation in EMS calls. For instance, lagHour is the number of EMS calls in the past hour. In Figure XX, we see that 15 minute lag appears to correlate with EMS count. 
-```{r Time Exploration: panels + time lags}
+# Feature Engineering  
+We now engineer a new feature: temporal lag, which lets us examine temporal correlation in EMS calls. For instance, lagHour is the number of EMS calls in the past hour. In Figure XX, we see that 15 minute lag appears to correlate with EMS count. 
+```{r Time Exploration: panels + time lags, message=FALSE, warning=FALSE, results='hide'}
 
 #lagHour / EMS Count plot
 cor_lag <- na.omit(study.panel.rd[, c("interval60","reporting_district","EMS_Count", "lagHour")])
-plot(cor_lag$EMS_Count, cor_lag$lagHour)
-cor.test(cor_lag$EMS_Count, cor_lag$lagHour, method = c("pearson", "kendall", "spearman"))
+#plot(cor_lag$EMS_Count, cor_lag$lagHour)
+#cor.test(cor_lag$EMS_Count, cor_lag$lagHour, method = c("pearson", "kendall", "spearman"))
 #0.01383557 
-table(cor_lag$EMS_Count, cor_lag$lagHour)  
+table(cor_lag$EMS_Count, cor_lag$lagHour)   #AD: not sure what this is for / how to explain it
 #        1     2     3     4
 #  1 14252  1127    80     6
 #  2  1136   107     3     0
@@ -1187,7 +1193,7 @@ study.panel.15 <-
 
 cor_lag.15 <- na.omit(study.panel.15[, c("interval15","reporting_district","EMS_Count", "lag15")])
 #plot(cor_lag.15$EMS_Count, cor_lag$lag15)
-cor.test(cor_lag.15$EMS_Count, cor_lag.15$lag15, method = c("pearson", "kendall", "spearman"))
+#cor.test(cor_lag.15$EMS_Count, cor_lag.15$lag15, method = c("pearson", "kendall", "spearman"))
 #0.008458162 
 table(cor_lag.15$EMS_Count, cor_lag.15$lag15)
 #       1    2    3
@@ -1235,10 +1241,8 @@ rbind(
 ``` 
 
 
-
-
 Table XX shows us in more detail correlations between EMS calls and lags. We see that the strongest correlation is with 30 and 45 minute lag. 
-```{r Time Lag Tables}
+```{r Time Lag Tables, message=FALSE, warning=FALSE}
 
 as.data.frame(study.panel) %>%
     group_by(interval60) %>% 
@@ -1248,7 +1252,7 @@ as.data.frame(study.panel) %>%
                                                 "lag12Hours","lag1day", "lay2day")))%>%
     group_by(Variable) %>%  
     summarize(correlation = round(cor(Value, EMS_Count),3)) %>%
-    kable (caption="Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
+    kable (caption="Time lag features and correlation", col.names = c('Time lag', 'Corelation')) %>%
     kable_styling()
 
 as.data.frame(na.omit(study.panel.15)) %>%
@@ -1258,13 +1262,13 @@ as.data.frame(na.omit(study.panel.15)) %>%
     mutate(Variable = factor(Variable, levels=c("lag15","lag30","lag45","lag60","lag90","lag120")))%>%
     group_by(Variable) %>%  
     summarize(correlation = round(cor(Value, EMS_Count),3)) %>%
-    kable (caption="Time lag features and corelation", col.names = c('Time lag', 'Corelation')) %>%
+    kable (caption="Time lag features and correlation", col.names = c('Time lag', 'Corelation')) %>%
     kable_styling()
 
 ```
 
 
-```{r animation}
+```{r animation, message=FALSE, warning=FALSE, results='hide'}
 week20 <-
   filter(EMS_18_20.sf, week == 20)
 
@@ -1306,7 +1310,7 @@ anim_save("ems_local", EMS_animation, duration=60, renderer = gifski_renderer())
 ```
 
 # Linear Regression Models
-```{r temporal model}
+```{r temporal model, message=FALSE, warning=FALSE, results='hide'}
 
 #split data sets
 library(caret)
@@ -1382,7 +1386,7 @@ summary(reg4_lag)
 ```
 
 # Predict on test data
-```{r predict on test data}
+```{r predict on test data, message=FALSE, warning=FALSE, include=TRUE, results='hide'}
 ##nesting
 EMS.Test.weekNest <- 
   as.data.frame(EMS.Test) %>%
@@ -1408,7 +1412,7 @@ week_predictions <-
            )
 ```
 
-```{r Temporal Accuracy}
+```{r Temporal Accuracy, message=FALSE, warning=FALSE, results='hide'}
 #Plot: MAE by Model Spec and Week
 week_predictions %>%
   filter(Week > 20 & Week < 35) %>%
@@ -1504,7 +1508,7 @@ ggplot() +
 ```
 
 # Spatial Accuracy
-```{r spatial validation}
+```{r spatial validation, message=FALSE, warning=FALSE, results='hide'}
 error.byWeek <-
   week_predictions.latlon%>%
   dplyr::select(reporting_district, Absolute_Error, Week) %>%
@@ -1524,7 +1528,7 @@ error.byHour <-
 ```
 
 # Cross Validation
-```{r cross validation}
+```{r cross validation, message=FALSE, warning=FALSE, results='hide'}
 library(caret)
 
 EMSsample <- sample_n(study.panel.net, 100000)%>%
@@ -1670,7 +1674,7 @@ error_by_reg_and_fold <-
 ```
 
 # Distribution of Error
-```{r plot: predicted vs observed}
+```{r plot: predicted vs observed, message=FALSE, warning=FALSE, results='hide'}
 #Error by fishnet cell
 week_predictions %>% 
   mutate(interval60 = map(data, pull, interval60),
@@ -1724,7 +1728,7 @@ week_predictions %>%
   plotTheme
 ```
 
-```{r map: spatial distribution of MAE}
+```{r map: spatial distribution of MAE, message=FALSE, warning=FALSE, results='hide'}
 week_predictions %>% 
     mutate(interval60 = map(data, pull, interval60),
            start_station = map(data, pull, start_station), 
