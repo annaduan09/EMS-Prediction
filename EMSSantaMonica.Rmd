@@ -384,8 +384,8 @@ harmful_lu <- parcel %>%
     mutate(Legend = "harmfullanduse")
 
 #OSM
-sport <- st_read("D:/Upenn/CPLN508/final project/12.14/EMS-Prediction/sport.geojson") %>%
-#sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
+#sport <- st_read("D:/Upenn/CPLN508/final project/12.14/EMS-Prediction/sport.geojson") %>%
+sport <- st_read("/Users/annaduan/Documents/GitHub/EMS-Prediction/sport.geojson") %>%
     st_transform(st_crs(fishnet))%>%
     mutate(Legend = "sport") 
 
@@ -1317,40 +1317,53 @@ trainIndex <- createDataPartition(study.panel.rd$EMS_Count,
                                   list = FALSE,
                                   times = 1)
 
+panel_net <- final_net %>%
+  dplyr::select(countEMS, uniqueID, responseTime, cvID, tract, servicerequest, Trash, Violent_Crime, bingeDrink, medHHInc, pctPoverty, ZIPCODE, bar.nn, downtown.nn, EMS.isSig.dist, geometry) 
 
-study.panel.net <- left_join(study.panel, final_net, by= "uniqueID") %>%
+study.panel.net <- left_join(study.panel, panel_net, by= "uniqueID") %>%
   na.omit() %>%
   mutate(tract = as.factor(tract))
 
 #test corelation
-numericVars <-
-  select_if(st_drop_geometry(study.panel.net), is.numeric) %>% na.omit()
+net.sample <- study.panel.net %>%     #AD: study.panel.net was way too big for my computer to make the corrplot haha
+  sample_n(., 20000)
 
+numericVars <-
+  select_if(net.sample, is.numeric) %>% na.omit()
+
+library(ggcorrplot)
 ggcorrplot(
   round(cor(numericVars), 1),
   p.mat = cor_pmat(numericVars),
   colors = c("#25CB10", "white", "#FA7800"),
   type="lower",
-  insig = "blank") +  
-    labs(title = "Figure 1: Sale Price Correlation with Numeric Variables") +
+  insig = "blank",
+  method = "circle") +  
+    labs(title = "EMS Call Correlation with Numeric Variables") +
   plotTheme()
 
-EMSallTrain <- study.panel.net[ trainIndex,]
-EMSallTest  <- study.panel.net[-trainIndex,] 
+#EMSallTrain <- study.panel.net[ trainIndex,]
+#EMSallTest  <- study.panel.net[-trainIndex,] 
 
-#EMS.Train <- subset(study.panel.net,
-#     interval60 >= as.POSIXct('2018-12-08') &
-#     interval60 < as.POSIXct('2020-4-08')
-#     )
-#EMS.Test <- subset(study.panel.net,
-#     interval60 >= as.POSIXct('2020-4-08') &
-#     interval60 <= as.POSIXct('2020-12-08')
-#     )
+EMS.Train <- subset(study.panel.net,
+     interval60 >= as.POSIXct('2018-12-08') &
+     interval60 < as.POSIXct('2020-4-08')
+     )
+EMS.Test <- subset(study.panel.net,
+     interval60 >= as.POSIXct('2020-4-08') &
+     interval60 <= as.POSIXct('2020-12-08')
+     )
 
-EMSallTrain <- EMSallTrain %>%
+#EMSallTrain <- EMSallTrain %>%
+#  rename(Week = week)
+
+#EMSallTest <- EMSallTest %>%
+#  rename(Week = week) 
+
+EMS.Train <- EMS.Train %>%
   rename(Week = week)
 
-EMSallTest <- EMSallTest %>%
+EMS.Test <- EMS.Test %>%
   rename(Week = week) 
 
 reg1_time <- 
@@ -1372,7 +1385,7 @@ summary(reg4_lag)
 ```{r predict on test data}
 ##nesting
 EMS.Test.weekNest <- 
-  as.data.frame(EMSallTest) %>%
+  as.data.frame(EMS.Test) %>%
   nest(-Week) 
 
 EMS.Test.weekNest
@@ -1398,10 +1411,12 @@ week_predictions <-
 ```{r Temporal Accuracy}
 #Plot: MAE by Model Spec and Week
 week_predictions %>%
+  filter(Week > 20 & Week < 35) %>%
   dplyr::select(Week, Regression, MAE) %>%
   gather(Variable, MAE, -Regression, -Week) %>%
   ggplot(aes(Week, MAE)) + 
     geom_bar(aes(fill = Regression, colour = Regression), position = "dodge", stat="identity") +
+  scale_fill_manual(aesthetics = "palette4") +
     labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
   plotTheme()
 #the mae is much lower when we use uniqueID instead of reporting-district
