@@ -1476,7 +1476,7 @@ week_predictions %>%
 #the mae is much lower when we use uniqueID instead of reporting-district
 
 
-#PLOT AGAINST ACTUAL SERIES - AD: I got this to work!
+#PLOT AGAINST ACTUAL SERIES
 week_predictions %>% 
   mutate(interval60 = map(data, pull, interval60),
          uniqueID = map(data, pull, uniqueID)) %>%
