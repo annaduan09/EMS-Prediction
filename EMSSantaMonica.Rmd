@@ -1734,8 +1734,6 @@ ggplot() +
 
 
 
-
-
 ```{r more spatial validation}
 week_predictions.rd <- week_predictions %>%
   mutate(interval60 = map(data, pull, interval60),
