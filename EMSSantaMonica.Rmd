@@ -260,13 +260,6 @@ fishnet <- fishnet_centroid %>%
 
 
 ################Santa Monica Open Data################
-#Crime
-#crime <- read.socrata("https://data.smgov.net/OData.svc/ia9m-wspt?Disposition='Arrest'") %>%
- #   dplyr::select(Y = latitude, X = longitude) %>%
-  #  na.omit() %>%
-   # st_as_sf(coords = c("X", "Y"), crs = 4326, agr = "constant") %>%
-    #st_transform(st_crs(fishnet)) %>%
-    #mutate(Legend = "Crime")
 
 violentCrime <- read.socrata("https://data.smgov.net/OData.svc/kn6p-4y74?UCR='0100' or UCR='0110' or UCR='0120' or UCR='0300' or UCR='0311' or UCR='0312' or UCR='0314' or UCR='0315' or UCR='0317' or UCR='0321' or UCR='0322' or UCR='0325'") %>%
   dplyr::select(Y = Latitude, X = Longitude) %>%
@@ -429,20 +422,20 @@ tractData <- left_join(CDC,ACS, by = "row") %>%
 
 
 # ATTACH VARIABLES TO FISHNET
-#vars_net <- 
-#  rbind(violentCrime,trash, streetlight, signandmarking, socialservice, harmful_lu) %>%
- # st_join(., fishnet, join=st_within) %>%
-  #st_drop_geometry() %>%
-  #group_by(uniqueID, Legend) %>%
-  #summarize(count = n()) %>%
-#    full_join(fishnet) %>%
-#    spread(Legend, count, fill=0) %>%
-#    st_sf() %>%
-#    dplyr::select(-`<NA>`) %>%
-#    na.omit() %>%
-#    ungroup()
+ <- 
+  rbind(violentCrime,trash, streetlight, signandmarking, socialservice, harmful_lu) %>%
+  st_join(., fishnet, join=st_within) %>%
+  st_drop_geometry() %>%
+  group_by(uniqueID, Legend) %>%
+  summarize(count = n()) %>%
+   full_join(fishnet) %>%
+  spread(Legend, count, fill=0) %>%
+    st_sf() %>%
+    dplyr::select(-`<NA>`) %>%
+    na.omit() %>%
+    ungroup()
 
-vars_net_tractData <-   rbind(violentCrime,trash, streetlight, signandmarking, socialservice, harmful_lu) %>%
+_tractData <-   rbind(violentCrime,trash, streetlight, signandmarking, socialservice, harmful_lu) %>%
   st_join(., fishnet, join=st_within) %>%
   st_drop_geometry() %>%
   group_by(uniqueID, Legend) %>%
@@ -458,16 +451,16 @@ vars_net_tractData <-   rbind(violentCrime,trash, streetlight, signandmarking, s
   st_join(., tractData) %>%
   st_join(., zipcode) %>%
   st_drop_geometry() %>%
-  left_join(vars_net,.,by="uniqueID") %>%
+  left_join(,.,by="uniqueID") %>%
   dplyr::select(-NAME.y) %>%
   rename(tract = NAME.x) %>%
   st_as_sf() 
 
-# MAKE VARS_NET MAPPABLE
-vars_net.long <- 
-  gather(vars_net_tractData, Variable, value, -geometry, -uniqueID)
+# MAKE  MAPPABLE
+.long <- 
+  gather(_tractData, Variable, value, -geometry, -uniqueID)
 
-vars <- unique(vars_net.long$Variable)
+vars <- unique(.long$Variable)
 mapList <- list()
 
 
@@ -475,47 +468,47 @@ mapList <- list()
 st_c <- st_coordinates
 st_coid <- st_centroid
 
-vars_net_tractData <-
-  vars_net_tractData %>%
+_tractData <-
+  _tractData %>%
     mutate(
       violentCrime.nn =
-        nn_function(st_c(st_coid(vars_net)), st_c(violentCrime),3),
+        nn_function(st_c(st_coid()), st_c(violentCrime),3),
       trash.nn =
-        nn_function(st_c(st_coid(vars_net)), st_c(trash),3),
+        nn_function(st_c(st_coid()), st_c(trash),3),
       violentCrime.nn =
-        nn_function(st_c(st_coid(vars_net)), st_c(violentCrime),3),
+        nn_function(st_c(st_coid()), st_c(violentCrime),3),
       streetlightissue.nn =
-        nn_function(st_c(st_coid(vars_net)), st_c(streetlight),3),
+        nn_function(st_c(st_coid()), st_c(streetlight),3),
       signandmarking.nn = 
-        nn_function(st_c(st_coid(vars_net)), st_c(signandmarking),3),
+        nn_function(st_c(st_coid()), st_c(signandmarking),3),
       socialservice.nn = 
-        nn_function(st_c(st_coid(vars_net)), st_c(socialservice),3),
+        nn_function(st_c(st_coid()), st_c(socialservice),3),
       harmfullu.nn = 
-        nn_function(st_c(st_coid(vars_net)), st_c(harmful_lu),1),
+        nn_function(st_c(st_coid()), st_c(harmful_lu),1),
       sport.nn = 
-        nn_function(st_c(st_coid(vars_net)), st_c(st_coid(sport)),1),
+        nn_function(st_c(st_coid()), st_c(st_coid(sport)),1),
       bar.nn =
-        nn_function(st_c(st_coid(vars_net)), st_c(bars),1),
+        nn_function(st_c(st_coid()), st_c(bars),1),
       sport.nn =
-        nn_function(st_c(st_coid(vars_net)), st_c(st_coid(sport)),1),
+        nn_function(st_c(st_coid()), st_c(st_coid(sport)),1),
       downtown.nn =
-        nn_function(st_c(st_coid(vars_net)), st_c(st_coid(downtown)),1),
+        nn_function(st_c(st_coid()), st_c(st_coid(downtown)),1),
       intersection.nn = 
-        nn_function(st_c(st_coid(vars_net)), st_c(intersections),3),
+        nn_function(st_c(st_coid()), st_c(intersections),3),
       uniqueID = as.numeric(rownames(.)))
 
-vars_net.long.nn <- 
-  dplyr::select(vars_net_tractData, ends_with(".nn")) %>%
+.long.nn <- 
+  dplyr::select(_tractData, ends_with(".nn")) %>%
     gather(Variable, value, -geometry)
 
-vars <- unique(vars_net.long.nn$Variable)
+vars <- unique(.long.nn$Variable)
 mapList <- list()
 
 ```
 
 
 # Data Exploration
-To begin our analysis, we wrangle EMS call data to understand the spatial trends in EMS call and response over time.  
+To begin our analysis, we wrangle EMS call data to understand the spatial trends in EMS calls and response over time.  
 
 
 ```{r EMS incidents, cache=TRUE, message=FALSE, warning=FALSE, include=TRUE, results='hide'}
@@ -523,7 +516,6 @@ To begin our analysis, we wrangle EMS call data to understand the spatial trends
 EMS <- read.socrata("https://data.smgov.net/Public-Safety/Fire-Calls-for-Service/5y3u-5db4?call_type_description=Emergency Medical Service (EMS)")%>% 
 dplyr::select (-census_block_2010_geoid, -census_tract_2010_geoid, -census_block_2000_geoid, -census_tract_2000_geoid, -incident_number, -call_type_description, -location, -disposition) %>%
     mutate (interval = difftime(cleared,received,units = "min"))
-
 
 
 EMS$incident_date <- as.POSIXct(EMS$incident_date)
@@ -637,7 +629,7 @@ EMS_10_20_net.response <-
 
 ################Final Net################
 final_net <-
-  inner_join(EMS_2020_net, st_drop_geometry(vars_net_tractData), by="uniqueID")
+  inner_join(EMS_2020_net, st_drop_geometry(_tractData), by="uniqueID")
 
 #2010 - 2020
 EMS_net.count.emg <- 
@@ -802,20 +794,20 @@ To better understand the spatial distribution of EMS calls, we also analyze the 
 
 ```{r risk factor maps, message=FALSE, warning=FALSE, results='hide', fig.height=8, fig.width=4}
 #select features
-#vars_net.long - for mapping
-vars_net.long <-
-   gather(vars_net_tractData %>%
+#.long - for mapping
+.long <-
+   gather(_tractData %>%
   dplyr::select(-uniqueID, -tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -pulmonaryDisease, -violentCrime.nn, -socialservice.nn, -intersection.nn, -diabetes, -trash.nn, -ZIPCODE), Variable, value, -geometry)
 
 #make list of unique variables
-vars <- unique(vars_net.long$Variable)
+vars <- unique(.long$Variable)
 mapList <- list()
 
 #map risk factors
 for(i in vars){
   mapList[[i]] <- 
     ggplot() +
-      geom_sf(data = filter(vars_net.long, Variable == i), aes(fill=value), colour=NA) +
+      geom_sf(data = filter(.long, Variable == i), aes(fill=value), colour=NA) +
       scale_fill_viridis(option = "A", name="") +
       labs(title=i) +
       mapTheme() +
@@ -857,7 +849,7 @@ What about the temporal risk factors for EMS incidents? First, we visualize the 
 
 ```{r ems call / time plot, message=FALSE, warning=FALSE, results='hide'}
 # weekly
-EMS_18_20 %>%
+EMS_2020 %>%
   mutate(count = 1) %>%
     group_by(incident_date) %>% 
       summarize(EMS_Count = sum(count)) %>%
@@ -1695,19 +1687,56 @@ week_predictions %>%
 # Spatial Accuracy
 ```{r spatial validation, message=FALSE, warning=FALSE, results='hide'}
 
+  
 error.byWeek <-
-  filter(week_predictions, Regression == "D_Space_Time_Lags") %>% 
-  unnest() %>% st_sf() %>%
-  dplyr::select(tract, Absolute_Error, week, geometry) %>%
-  gather(Variable, Value, -tract, -week, -geometry) %>%
-    group_by(Variable, tract, week) %>%
+  filter(week_predictions, Regression == "Time_Space_Lag" & Week == 43) %>% 
+  unnest() %>% 
+  #filter(dotw == "Wed") %>%
+  st_sf() %>%
+  dplyr::select(Absolute_Error, uniqueID, dotw, geometry) %>%
+  gather(Variable, Value, -dotw, -uniqueID, -geometry) %>%
+    group_by(uniqueID, dotw) %>%
     summarize(MAE = mean(Value))
 
+error.byHour <-
+    filter(week_predictions, Regression == "Time_Space_Lag" & Week == 35) %>%
+  unnest() %>%   
+  st_sf() %>%
+    dplyr::select(uniqueID, Absolute_Error, interval60, geometry) %>%
+    gather(Variable, Value, -interval60, -uniqueID, -geometry) %>%
+    filter(wday(interval60, label = TRUE) == "Mon") %>%
+    group_by(hour = hour(interval60), uniqueID) %>%
+    summarize(MAE = mean(Value)) 
+
+#MAP: error by hour + dotw
+error.byHour %>%
+  dplyr::filter(hour == 0 | hour == 4 | hour == 8 | hour == 12 | hour == 16 | hour == 20 | hour == 23)  %>%
+ggplot() +
+  geom_sf(aes(fill = MAE, colour = MAE)) +
+    facet_wrap(~hour)+
+  labs(title = "EMS Call Prediction n/ MAE by Hour", subtitle = "Santa Monica, CA") +
+    plotTheme()
+
+error.byWeek %>%
+ggplot(aes(uniqueID, MAE)) +  #AD: not working - empty MAE
+  geom_bar(stat = "identity") +
+    scale_fill_manual(values = palette5) +
+    labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
+  plotTheme()
+
+error.byHour %>%
+ggplot() +
+  geom_sf(aes(fill = MAE, colour = MAE)) +
+  labs(title = "EMS Call Prediction MAE", subtitle = "Santa Monica, CA") +
+    plotTheme()
+```
 
 
-###
 
 
+
+
+```{r more spatial validation}
 week_predictions.rd <- week_predictions %>%
   mutate(interval60 = map(data, pull, interval60),
          latitude = map(data, pull, latitude),
@@ -1731,11 +1760,7 @@ week_predictions.rd <- left_join(week_predictions.rd, week_predictions.twocol, b
 #week_predictions.latlon <- left_join(week_predictions.rd, EMS_2020[,c("reporting_district", "latitude", #"longitude", "dotw", "week", "interval60")],by = "reporting_district")
 
 
-ggplot(week_predictions.twocol, aes(reporting_district, MAE)) +  #AD: not working - empty MAE
-  geom_bar(stat = "identity") +
-    scale_fill_manual(values = palette5) +
-    labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
-  plotTheme()
+
 
 week_predictions.latlon %>% 
   mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
@@ -1753,20 +1778,6 @@ week_predictions.latlon %>%
        y="Predicted trips")+
   plotTheme()
   
-#error.byWeek <-
-#  week_predictions.latlon%>%
-#  dplyr::select(reporting_district, Absolute_Error, Week) %>%
-#  gather(Variable, Value, -reporting_district, -Week) %>%
- #   group_by(Variable, reporting_district, Week) %>%
- #   summarize(MAE = mean(Value))
-
-#error.byHour <-
-#    week_predictions.latlon%>%
-#    dplyr::select(reporting_district, Absolute_Error, interval60.x) %>%
-#    gather(Variable, Value, -interval60.x, -reporting_district) %>%
-#    filter(wday(interval60.x, label = TRUE) == "Mon" & week(interval60.x) == 50) %>%
-#    group_by(hour = hour(interval60.x), reporting_district) %>%
-#    summarize(MAE = mean(Value)) 
 
 ggplot()+
   geom_sf(data = SM_Base, color = "grey", fill = "transparent") +
