@@ -1370,23 +1370,20 @@ trainIndex <- createDataPartition(study.panel.rd$EMS_Count,
 ```
 
 ```{r corr plot, message=FALSE, warning=FALSE, results='hide'}
-panel_net <- final_net %>%
-  dplyr::select(countEMS, uniqueID, responseTime, cvID, tract, servicerequest, Trash, Violent_Crime, bingeDrink, medHHInc, pctPoverty, ZIPCODE, bar.nn, downtown.nn, EMS.isSig.dist, geometry) 
-
-study.panel.net <- left_join(study.panel, panel_net, by= "uniqueID") %>%
+#Make final panel with spatial features
+study.panel.net <- final_net %>%
+  dplyr::select(countEMS, uniqueID, responseTime, cvID, tract, servicerequest, Trash, Violent_Crime, bingeDrink, medHHInc, pctPoverty, ZIPCODE, bar.nn, downtown.nn, EMS.isSig.dist, geometry) %>%
+    dplyr::mutate(latitude = sf::st_coordinates(st_centroid(.))[,1],
+                longitude = sf::st_coordinates(st_centroid(.))[,2]) %>%
+  left_join(study.panel, ., by= "uniqueID") %>%
   na.omit() %>%
   mutate(tract = as.factor(tract))
 
-#test corelation
-net.sample <- study.panel.net %>%     #AD: study.panel.net was way too big for my computer to make the corrplot haha
-  sample_n(., 20000)
-
-numericVars <-
-  select_if(net.sample, is.numeric) %>% na.omit()
-
+#Plot correlations
 library(ggcorrplot)
 ggcorrplot(
-  round(cor(numericVars), 1),
+  round(cor(select_if(study.panel.net %>%   
+  sample_n(., 20000), is.numeric) %>% na.omit()), 1),
   p.mat = cor_pmat(numericVars),
   colors = c("yellow", "white", "purple"),
   type="lower",
@@ -1400,11 +1397,11 @@ ggcorrplot(
 #EMSallTest  <- study.panel.net[-trainIndex,] 
 
 EMS.Train <- subset(study.panel.net,
-     interval60 >= as.POSIXct('2018-12-08') &
-     interval60 < as.POSIXct('2020-4-08')
+     interval60 >= as.POSIXct('2019-12-08') &
+     interval60 < as.POSIXct('2020-8-08')
      )
 EMS.Test <- subset(study.panel.net,
-     interval60 >= as.POSIXct('2020-4-08') &
+     interval60 >= as.POSIXct('2020-8-08') &
      interval60 <= as.POSIXct('2020-12-08')
      )
 
@@ -1421,7 +1418,7 @@ EMS.Test <- EMS.Test %>%
   rename(Week = week) 
 
 reg1_time <- 
-  lm(EMS_Count ~  hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed + isWeekend + isHoliday + isPeakHour, data = EMS.Train)
+  lm(EMS_Count ~  hour(interval60) + dotw + Temperature + Precipitation + wind_gust + Wind_Speed + isWeekend + isHoliday + isPeakHour, data = EMS.Train)
 
 reg2_space <- 
   lm(EMS_Count ~ uniqueID + Violent_Crime + bar.nn + downtown.nn, data = EMS.Train)
@@ -1429,7 +1426,7 @@ reg2_space <-
 reg3_time_space <- 
   lm(EMS_Count ~ hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed + uniqueID + Violent_Crime + bar.nn + downtown.nn + isWeekend + isHoliday + isPeakHour, data = EMS.Train)
 
-reg4_lag <-   lm(EMS_Count ~ hour(interval60) + dotw + Temperature + Precipitation + visibility + wind_gust + Wind_Speed + +isWeekend + isHoliday + isPeakHour + uniqueID + Violent_Crime + bar.nn + downtown.nn + lagHour + lag2Hours + lag4Hours + lag12Hours + lag1day, data = EMS.Train)
+reg4_lag <-   lm(EMS_Count ~ hour(interval60) + dotw + Temperature + Precipitation + wind_gust + Wind_Speed + +isWeekend + isHoliday + isPeakHour + uniqueID + Violent_Crime + bar.nn + downtown.nn + lagHour + lag2Hours + lag4Hours + lag12Hours + lag1day, data = EMS.Train)
 
 summary(reg4_lag)  
 ##add reportingz
@@ -1460,122 +1457,16 @@ week_predictions <-
            MAE = map_dbl(Absolute_Error, mean, na.rm = TRUE),
            sd_AE = map_dbl(Absolute_Error, sd, na.rm = TRUE),
            )
+
+week_predictions
 ```
 
-```{r Temporal Accuracy, message=FALSE, warning=FALSE, results='hide'}
-#Plot: MAE by Model Spec and Week
-week_predictions %>%
-  filter(Week > 40) %>%
-  dplyr::select(Week, Regression, MAE) %>%
-  gather(Variable, MAE, -Regression, -Week) %>%
-  ggplot(aes(Week, MAE)) + 
-    geom_bar(aes(fill = Regression), position = "dodge", stat="identity") +
-  scale_fill_manual(values = palette4) +
-    labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
-  plotTheme()
-#the mae is much lower when we use uniqueID instead of reporting-district
 
-
-#PLOT AGAINST ACTUAL SERIES
-week_predictions %>% 
-  mutate(interval60 = map(data, pull, interval60),
-         uniqueID = map(data, pull, uniqueID)) %>%
-  dplyr::select(interval60, uniqueID, Observed, Prediction, Regression) %>%
-  unnest() %>%
-  filter(interval60 >= as.POSIXct('2020-11-08')) %>%
-  gather(Variable, Value, -Regression, -interval60, -uniqueID) %>%
-  group_by(Regression, Variable, interval60) %>%
-  summarize(Value = sum(Value)) %>%
-  ggplot(aes(interval60, Value, colour=Variable)) + 
-  geom_line(size = 1.1) + 
-  facet_wrap(~Regression, ncol=1) +
-  labs(title = "Predicted/Observed EMS Call time series", subtitle = "Santa Monica, CA",  x = "Hour", y= "EMS Calls") +
-  plotTheme()  
-
-
-week_predictions.rd <- week_predictions %>%
-  mutate(interval60 = map(data, pull, interval60),
-         latitude = map(data, pull, latitude),
-         longitude = map(data, pull, longitude)) %>%
-  dplyr::select(latitude, longitude, interval60, Observed, Prediction, Regression, Absolute_Error, sd_AE, MAE) %>%
-  unnest()
-
-#%>%
- # left_join(., EMS_18_20, by="interval60")
-
-
-week_predictions.twocol <- week_predictions.rd %>%
-  left_join(., EMS_18_20 %>% dplyr::select(reporting_district, latitude, longitude, station, incident_date) %>% unique()) %>%
-  filter(Regression == "Time_Space_FE_timeLags") %>%
-  group_by(reporting_district) %>%
-  summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))
-
-#select only uniqueID of one, join by incident, not reporting district
-week_predictions.rd <- left_join(week_predictions.rd, week_predictions.twocol, by="reporting_district")
-
-#week_predictions.latlon <- left_join(week_predictions.rd, EMS_2020[,c("reporting_district", "latitude", #"longitude", "dotw", "week", "interval60")],by = "reporting_district")
-
-ggplot()+
-  geom_sf(data = SM_Base, color = "grey", fill = "transparent") +
-  geom_point(data = week_predictions.twocol, aes(x = longitude, y = latitude, color = MAE), 
-             fill = "transparent", alpha = 0.4)+
-  scale_colour_viridis(direction = -1,
-  discrete = FALSE, option = "D")+
-  ylim(min(dat_net$latitude), max(dat_net$latitude))+
-  xlim(min(dat_net$longitude), max(dat_net$longitude))+
-  labs(title="Figure 5.3: Mean Abs Error, Test Set, Model 4")+
-  mapTheme()
-
-
-ggplot(week_predictions.twocol, aes(reporting_district, MAE)) +  #AD: not working - empty MAE
-  geom_bar(stat = "identity") +
-    scale_fill_manual(values = palette5) +
-    labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
-  plotTheme()
-
-week_predictions.latlon %>% 
-  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
-         time_of_day = case_when(hour(interval60.x) < 7 | hour(interval60.x) > 18 ~ "Overnight",
-                                 hour(interval60.x) >= 7 & hour(interval60.x) < 10 ~ "AM Rush",
-                                 hour(interval60.x) >= 10 & hour(interval60.x) < 15 ~ "Mid-Day",
-                                 hour(interval60.x) >= 15 & hour(interval60.x) <= 18 ~ "PM Rush"))%>%
-  ggplot()+
-  geom_point(aes(x= Observed, y = Prediction))+
-    geom_smooth(aes(x= Observed, y= Prediction), method = "lm", se = FALSE, color = "red")+
-    geom_abline(slope = 1, intercept = 0)+
-  facet_grid(time_of_day~weekend)+
-  labs(title="Figure 5.4: Observed vs Predicted",
-       x="Observed trips", 
-       y="Predicted trips")+
-  plotTheme()
-
-```
-
-# Spatial Accuracy
-```{r spatial validation, message=FALSE, warning=FALSE, results='hide'}
-error.byWeek <-
-  week_predictions.latlon%>%
-  dplyr::select(reporting_district, Absolute_Error, Week) %>%
-  gather(Variable, Value, -reporting_district, -Week) %>%
-    group_by(Variable, reporting_district, Week) %>%
-    summarize(MAE = mean(Value))
-
-error.byHour <-
-    week_predictions.latlon%>%
-    dplyr::select(reporting_district, Absolute_Error, interval60.x) %>%
-    gather(Variable, Value, -interval60.x, -reporting_district) %>%
-    filter(wday(interval60.x, label = TRUE) == "Mon" & week(interval60.x) == 50) %>%
-    group_by(hour = hour(interval60.x), reporting_district) %>%
-    summarize(MAE = mean(Value)) 
-
-
-```
-
-# Cross Validation
+# Cross Validation - to be improved
 ```{r cross validation, message=FALSE, warning=FALSE, results='hide'}
 library(caret)
 
-EMSsample <- sample_n(study.panel.net, 100000)%>%
+EMSsample <- sample_n(study.panel.net, 10000)%>%
   na.omit()
 
 fitControl <- trainControl(method = "cv", 
@@ -1717,30 +1608,146 @@ error_by_reg_and_fold <-
 
 ```
 
-# Distribution of Error
-```{r plot: predicted vs observed, message=FALSE, warning=FALSE, results='hide'}
-#Error by fishnet cell
+```{r Temporal Accuracy, message=FALSE, warning=FALSE, results='hide'}
+#Plot: MAE by Model Spec and Week
+week_predictions %>%
+  filter(Week > 40) %>%
+  dplyr::select(Week, Regression, MAE) %>%
+  gather(Variable, MAE, -Regression, -Week) %>%
+  ggplot(aes(Week, MAE)) + 
+    geom_bar(aes(fill = Regression), position = "dodge", stat="identity") +
+  scale_fill_manual(values = palette4) +
+    labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
+  plotTheme()
+#the mae is much lower when we use uniqueID instead of reporting-district
+
+
+#PLOT AGAINST ACTUAL SERIES
 week_predictions %>% 
   mutate(interval60 = map(data, pull, interval60),
-         uniqueID = map(data, pull, uniqueID), 
-         uniqueID = map(data, pull, uniqueID), 
-         uniqueID = map(data, pull, start_station_longitude)) %>%
-  select(interval60, start_station_id, start_station_longitude, start_station_latitude, Observed, Prediction, Regression) %>%
+         uniqueID = map(data, pull, uniqueID)) %>%
+  dplyr::select(interval60, uniqueID, Observed, Prediction, Regression) %>%
   unnest() %>%
+  filter(interval60 >= as.POSIXct('2020-11-08')) %>%
+  gather(Variable, Value, -Regression, -interval60, -uniqueID) %>%
+  group_by(Regression, Variable, interval60) %>%
+  summarize(Value = sum(Value)) %>%
+  ggplot(aes(interval60, Value, colour=Variable)) + 
+  geom_line(size = 1.1) + 
+  facet_wrap(~Regression, ncol=1) +
+  labs(title = "Predicted/Observed EMS Call time series", subtitle = "Santa Monica, CA",  x = "Hour", y= "EMS Calls") +
+  plotTheme()  
+
+############everything above this works###############
+
+
+
+week_predictions.rd <- week_predictions %>%
+  mutate(interval60 = map(data, pull, interval60),
+         latitude = map(data, pull, latitude),
+         longitude = map(data, pull, longitude)) %>%
+  dplyr::select(latitude, longitude, interval60, Observed, Prediction, Regression, Absolute_Error, sd_AE, MAE) %>%
+  unnest() %>%
+ left_join(., EMS_18_20, by= c("interval60" = "interval60"))
+
+
+
+
+week_predictions.twocol <- week_predictions.rd %>%
+  left_join(., EMS_18_20 %>% dplyr::select(reporting_district, latitude, longitude, station, incident_date) %>% unique()) %>%
+  filter(Regression == "Time_Space_FE_timeLags") %>%
+  group_by(reporting_district) %>%
+  summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))
+
+#Michael: select uniqueID, join by incident, not reporting district
+week_predictions.rd <- left_join(week_predictions.rd, week_predictions.twocol, by="reporting_district")
+
+#week_predictions.latlon <- left_join(week_predictions.rd, EMS_2020[,c("reporting_district", "latitude", #"longitude", "dotw", "week", "interval60")],by = "reporting_district")
+
+
+ggplot(week_predictions.twocol, aes(reporting_district, MAE)) +  #AD: not working - empty MAE
+  geom_bar(stat = "identity") +
+    scale_fill_manual(values = palette5) +
+    labs(title = "Figure 5.1: Mean Absolute Errors by model specification and week") +
+  plotTheme()
+
+week_predictions.latlon %>% 
+  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
+         time_of_day = case_when(hour(interval60.x) < 7 | hour(interval60.x) > 18 ~ "Overnight",
+                                 hour(interval60.x) >= 7 & hour(interval60.x) < 10 ~ "AM Rush",
+                                 hour(interval60.x) >= 10 & hour(interval60.x) < 15 ~ "Mid-Day",
+                                 hour(interval60.x) >= 15 & hour(interval60.x) <= 18 ~ "PM Rush"))%>%
+  ggplot()+
+  geom_point(aes(x= Observed, y = Prediction))+
+    geom_smooth(aes(x= Observed, y= Prediction), method = "lm", se = FALSE, color = "red")+
+    geom_abline(slope = 1, intercept = 0)+
+  facet_grid(time_of_day~weekend)+
+  labs(title="Figure 5.4: Observed vs Predicted",
+       x="Observed trips", 
+       y="Predicted trips")+
+  plotTheme()
+
+```
+
+# Spatial Accuracy
+```{r spatial validation, message=FALSE, warning=FALSE, results='hide'}
+#error.byWeek <-
+#  week_predictions.latlon%>%
+#  dplyr::select(reporting_district, Absolute_Error, Week) %>%
+#  gather(Variable, Value, -reporting_district, -Week) %>%
+ #   group_by(Variable, reporting_district, Week) %>%
+ #   summarize(MAE = mean(Value))
+
+#error.byHour <-
+#    week_predictions.latlon%>%
+#    dplyr::select(reporting_district, Absolute_Error, interval60.x) %>%
+#    gather(Variable, Value, -interval60.x, -reporting_district) %>%
+#    filter(wday(interval60.x, label = TRUE) == "Mon" & week(interval60.x) == 50) %>%
+#    group_by(hour = hour(interval60.x), reporting_district) %>%
+#    summarize(MAE = mean(Value)) 
+
+ggplot()+
+  geom_sf(data = SM_Base, color = "grey", fill = "transparent") +
+  geom_point(data = week_predictions.rd %>% sample_n(., 10000), aes(x = longitude.x, y = latitude.y, color = MAE), 
+             fill = "transparent", alpha = 0.4)+
+  scale_colour_viridis(direction = -1,
+  discrete = FALSE, option = "D")+
+  ylim(min(final_net$latitude), max(final_net$latitude))+
+  xlim(min(final_net$longitude), max(final_net$longitude))+
+  labs(title="Figure 5.3: Mean Abs Error, Test Set, Model 4")+
+  mapTheme()
+
+
+
+week_predictions.rd %>% 
+ # mutate(interval60 = map(data, pull, interval60),
+   #      uniqueID = map(data, pull, uniqueID), 
+  #       latitude = map(data, pull, latitude.x), 
+    #     latitude = map(data, pull, longitude.x)) %>%
+  dplyr::select(interval60, uniqueID, longitude.x, latitude.x, Observed, Prediction, Regression) %>%
+  unnest() %>%
+    sample_n(10000) %>%
   filter(Regression == "DTime_Space_FE_timeLags") %>%
-  group_by(start_station_id, start_station_longitude, start_station_latitude) %>%
+  group_by(uniqueID, longitude, latitude) %>%
   summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))%>%
   ggplot(.)+
-  geom_sf(data = sfTracts %>%
+  geom_sf(data = ACS %>%
             st_transform(crs=4326), colour = '#efefef')+
-  geom_point(aes(x = start_station_longitude, y = start_station_latitude, color = MAE), 
+  geom_point(aes(x = longitude, y = latitude, color = MAE), 
              fill = "transparent", alpha = 0.4)+
   scale_colour_viridis(direction = -1,
                        discrete = FALSE, option = "D")+
-  ylim(min(sfBike_census$start_station_latitude), max(sfBike_census$start_station_latitude))+
-  xlim(min(sfBike_census$start_station_longitude), max(sfBike_census$start_station_longitude))+
+  ylim(min(final_net$latitude), max(final_net$latitude))+
+  xlim(min(final_net$longitude), max(final_net$longitude))+
   labs(title="Mean Abs Error, Test Set, Model 4")+
   mapTheme()
+
+
+```
+
+# Distribution of Error
+```{r plot: predicted vs observed, message=FALSE, warning=FALSE, results='hide'}
+
 
 
 
