@@ -422,7 +422,7 @@ tractData <- left_join(CDC,ACS, by = "row") %>%
 
 
 # ATTACH VARIABLES TO FISHNET
- <- 
+ vars_net <- 
   rbind(violentCrime,trash, streetlight, signandmarking, socialservice, harmful_lu) %>%
   st_join(., fishnet, join=st_within) %>%
   st_drop_geometry() %>%
@@ -435,7 +435,7 @@ tractData <- left_join(CDC,ACS, by = "row") %>%
     na.omit() %>%
     ungroup()
 
-_tractData <-   rbind(violentCrime,trash, streetlight, signandmarking, socialservice, harmful_lu) %>%
+vars_net_tractData <-   rbind(violentCrime,trash, streetlight, signandmarking, socialservice, harmful_lu) %>%
   st_join(., fishnet, join=st_within) %>%
   st_drop_geometry() %>%
   group_by(uniqueID, Legend) %>%
@@ -451,16 +451,16 @@ _tractData <-   rbind(violentCrime,trash, streetlight, signandmarking, socialser
   st_join(., tractData) %>%
   st_join(., zipcode) %>%
   st_drop_geometry() %>%
-  left_join(,.,by="uniqueID") %>%
+  left_join(vars_net,.,by="uniqueID") %>%
   dplyr::select(-NAME.y) %>%
   rename(tract = NAME.x) %>%
   st_as_sf() 
 
 # MAKE  MAPPABLE
-.long <- 
-  gather(_tractData, Variable, value, -geometry, -uniqueID)
+vars_net.long <- 
+  gather(vars_net_tractData, Variable, value, -geometry, -uniqueID)
 
-vars <- unique(.long$Variable)
+vars <- unique(vars_net.long$Variable)
 mapList <- list()
 
 
@@ -468,41 +468,43 @@ mapList <- list()
 st_c <- st_coordinates
 st_coid <- st_centroid
 
-_tractData <-
-  _tractData %>%
+vars_net_tractData <-
+  vars_net_tractData %>%
     mutate(
       violentCrime.nn =
-        nn_function(st_c(st_coid()), st_c(violentCrime),3),
+        nn_function(st_c(st_coid(vars_net)), st_c(violentCrime),3),
       trash.nn =
-        nn_function(st_c(st_coid()), st_c(trash),3),
+        nn_function(st_c(st_coid(vars_net)), st_c(trash),3),
       violentCrime.nn =
-        nn_function(st_c(st_coid()), st_c(violentCrime),3),
+        nn_function(st_c(st_coid(vars_net)), st_c(violentCrime),3),
       streetlightissue.nn =
-        nn_function(st_c(st_coid()), st_c(streetlight),3),
+        nn_function(st_c(st_coid(vars_net)), st_c(streetlight),3),
       signandmarking.nn = 
-        nn_function(st_c(st_coid()), st_c(signandmarking),3),
+        nn_function(st_c(st_coid(vars_net)), st_c(signandmarking),3),
       socialservice.nn = 
-        nn_function(st_c(st_coid()), st_c(socialservice),3),
+        nn_function(st_c(st_coid(vars_net)), st_c(socialservice),3),
       harmfullu.nn = 
-        nn_function(st_c(st_coid()), st_c(harmful_lu),1),
+        nn_function(st_c(st_coid(vars_net)), st_c(harmful_lu),1),
       sport.nn = 
-        nn_function(st_c(st_coid()), st_c(st_coid(sport)),1),
+        nn_function(st_c(st_coid(vars_net)), st_c(st_coid(sport)),1),
       bar.nn =
-        nn_function(st_c(st_coid()), st_c(bars),1),
+        nn_function(st_c(st_coid(vars_net)), st_c(bars),1),
       sport.nn =
-        nn_function(st_c(st_coid()), st_c(st_coid(sport)),1),
+        nn_function(st_c(st_coid(vars_net)), st_c(st_coid(sport)),1),
       downtown.nn =
-        nn_function(st_c(st_coid()), st_c(st_coid(downtown)),1),
+        nn_function(st_c(st_coid(vars_net)), st_c(st_coid(downtown)),1),
       intersection.nn = 
-        nn_function(st_c(st_coid()), st_c(intersections),3),
+        nn_function(st_c(st_coid(vars_net)), st_c(intersections),3),
       uniqueID = as.numeric(rownames(.)))
 
-.long.nn <- 
-  dplyr::select(_tractData, ends_with(".nn")) %>%
+vars_net.long.nn <- 
+  dplyr::select(vars_net_tractData, ends_with(".nn")) %>%
     gather(Variable, value, -geometry)
 
-vars <- unique(.long.nn$Variable)
+vars <- unique(vars_net.long.nn$Variable)
 mapList <- list()
+
+rm(bars, call311, downtown, CDC, intersections, lu, parcel, signandmarking, socialservice, sport, streetlight, trash, violentCrime, zipcode)
 
 ```
 
@@ -629,7 +631,7 @@ EMS_10_20_net.response <-
 
 ################Final Net################
 final_net <-
-  inner_join(EMS_2020_net, st_drop_geometry(_tractData), by="uniqueID")
+  inner_join(EMS_2020_net, st_drop_geometry(vars_net_tractData), by="uniqueID")
 
 #2010 - 2020
 EMS_net.count.emg <- 
@@ -737,21 +739,6 @@ What about response times? We would expect that due to the pandemic, response ti
 
 ```{r EMS Response Time Map, message=FALSE, warning=FALSE, results='hide'}
 #Map of 2020 and 2010-2020 response times
-#resp_2020<-
- # ggplot() +
-#  geom_sf(data = EMS_2020_net.response, aes(fill = responseTime, colour = responseTime)) +
-#  scale_fill_viridis(option = "A", name = "Minutes") +
-#  scale_colour_viridis(option = "A", name = "Minutes") +
-#  labs(title = "2020", subtitle = "Santa Monica, CA") +
-#  mapTheme()
-
-#resp_1020 <-
-#  ggplot() +
-#  geom_sf(data = EMS_10_20_net.response, aes(fill = responseTime, colour = responseTime)) +
-#  scale_fill_viridis(option = "A", name = "Minutes") +
-#  scale_colour_viridis(option = "A", name = "Minutes") +
-#  labs(title = "2010 - 2020", subtitle = "Santa Monica, CA") +
-#  mapTheme()
 
 g_legend<-function(a.gplot){
   tmp <- ggplot_gtable(ggplot_build(a.gplot))
@@ -759,7 +746,7 @@ g_legend<-function(a.gplot){
   legend <- tmp$grobs[[leg]]
   return(legend)}
 
-mylegend<-g_legend(resp_2020<-
+mylegend<-g_legend(
   ggplot() +
   geom_sf(data = EMS_2020_net.response, aes(fill = responseTime, colour = responseTime)) +
   scale_fill_viridis(option = "A", name = "Minutes") +
@@ -773,7 +760,6 @@ p3 <- grid.arrange(arrangeGrob(ggplot() +
   scale_colour_viridis(option = "A", name = "Minutes") +
   labs(title = "2020", subtitle = "Santa Monica, CA") +
   mapTheme() + theme(legend.position="none"),
-                               resp_1020 <-
   ggplot() +
   geom_sf(data = EMS_10_20_net.response, aes(fill = responseTime, colour = responseTime)) +
   scale_fill_viridis(option = "A", name = "Minutes") +
@@ -792,22 +778,22 @@ To better understand the spatial distribution of EMS calls, we also analyze the 
 3. Cancer, heart disease, stroke, and median age surprisingly do not exhibit clear spatial patterns and do not appear correlated with EMS calls.  
 
 
-```{r risk factor maps, message=FALSE, warning=FALSE, results='hide', fig.height=8, fig.width=4}
+```{r risk factor maps, message=FALSE, warning=FALSE, results='hide', fig.height=6, fig.width=4}
 #select features
 #.long - for mapping
-.long <-
-   gather(_tractData %>%
+vars_net.long <-
+   gather(vars_net_tractData %>%
   dplyr::select(-uniqueID, -tract, -harmfullanduse, -markings, -streetlights, -arthritis, -highBloodPressure, -bloodPressureMeds, -doctorCheckups, -cholesterolScreen, -colonScreen65, -clinicalServicesMen65, -dentalVisits, -highCholesterol, -kidneyDisease, -noPhysicalActivity, -mammograms50, -papTest, -poorPhysicalHealth, -sleepDeprived, -noTeeth, -row, -medianage_male, -medianage_female, -population, -pctWhite, -pctRenterOcc, -pctNoHS, -youthUnemploy, -pctMaleYouth, -streetlightissue.nn, -signandmarking.nn, -harmfullu.nn, -sport.nn, -pulmonaryDisease, -violentCrime.nn, -socialservice.nn, -intersection.nn, -diabetes, -trash.nn, -ZIPCODE), Variable, value, -geometry)
 
 #make list of unique variables
-vars <- unique(.long$Variable)
+vars <- unique(vars_net.long$Variable)
 mapList <- list()
 
 #map risk factors
 for(i in vars){
   mapList[[i]] <- 
     ggplot() +
-      geom_sf(data = filter(.long, Variable == i), aes(fill=value), colour=NA) +
+      geom_sf(data = filter(vars_net.long, Variable == i), aes(fill=value), colour=NA) +
       scale_fill_viridis(option = "A", name="") +
       labs(title=i) +
       mapTheme() +
@@ -866,7 +852,7 @@ EMS_2020 %>%
 Next, Figure XX shows that EMS calls are most frequent on weekdays, and that they peak at 1pm and 3pm respectively on weekdays and weekends. The day of week with most calls is Monday.  
 
 
-```{r calls / time of day, fig.height=4, fig.width=8, message=FALSE, warning=FALSE, results='hide'}
+```{r calls / time of day, fig.height=3, fig.width=6, message=FALSE, warning=FALSE, results='hide'}
 grid.arrange(
 ggplot(EMS_18_20 %>% mutate(hour = hour(interval60)))+
      geom_freqpoly(aes(hour, color = dotw), binwidth = 1)+
@@ -882,7 +868,7 @@ ggplot(EMS_18_20 %>%
        x="Hour", 
        y="Trip Counts")+
      plotTheme(),
-ncol=2,
+ncol=1,
 top = "EMS Calls by Day of Week, 2018-2020")
 
 ggplot(EMS_18_20 %>%
@@ -902,7 +888,7 @@ What about the relationship between EMS and rush hour? These are times where mor
 ```{r EMS call / AM PM Rush, message=FALSE, warning=FALSE, results='hide'}
 
 ####AM/PM Rushes####
-EMS_18_20 %>% 
+EMS_2020 %>% 
          mutate(time_of_day = case_when(hour(interval60) < 5 | hour(interval60) > 20 ~ "Overnight",
                                  hour(interval60) >= 5 & hour(interval60) < 10 ~ "AM Rush",
                                  hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
@@ -1028,7 +1014,6 @@ study.panel <-
   expand.grid(interval60=unique(dat_net$interval60), 
               uniqueID = unique(dat_net$uniqueID))
 
-#EMS_18_20.sample <- EMS_18_20[sample(nrow(EMS_18_20), 1500), ]
 
 study.panel.rd <-
   expand.grid(interval60=unique(EMS_2020$interval60), 
@@ -1105,11 +1090,6 @@ This new study panel allows us to look at EMS calls' correlation with holidays. 
 
 ```{r plot: holiday effect, message=FALSE, warning=FALSE, results='hide'}
 ################Holidays################
-mondays <- #for reference in the graphic
-  mutate(study.panel,
-         monday = ifelse(dotw == "Mon" & hour(interval60) == 1,
-                         interval60, 0)) %>%
-  filter(monday != 0) 
 
 thanksgivingEve   <- as.POSIXct("2020-11-26 01:00:00")
 xmasEve <- as.POSIXct("2019-12-24 01:00:00")
@@ -1120,7 +1100,6 @@ mardiGras <- as.POSIXct("2020-2-25 01:00:00")
 cincoDeMayo <- as.POSIXct("2020-5-5 01:00:00")
 halloween <- as.POSIXct("2020-10-31 01:00:00")
 stPattys <- as.POSIXct("2020-3-17 01:00:00")
-
 
 
 ##labor day
@@ -1155,13 +1134,26 @@ holidayPlot %>%
         plotTheme() + theme(panel.grid.major = element_blank())
 ```
 
+```{r plot: weather vs trips, message=FALSE, warning=FALSE, results='hide'}
+study.panel %>%
+  filter(week < 10) %>%
+  group_by(interval60) %>% 
+  summarize(EMS_Count = mean(EMS_Count),
+            Temperature = first(Temperature)) %>%
+  mutate(week = week(interval60)) %>%
+  ggplot(aes(Temperature, EMS_Count)) + 
+    geom_point() + geom_smooth(method = "lm", se= FALSE) +
+    facet_wrap(~week, ncol=3) + 
+    labs(title="EMS Count as a fuction of Temperature by week",
+         x="Temperature", y="Mean EMS Count") +
+    plotTheme() 
+```
 
 # EMS Call Hotspots 
 With an idea of where and when EMS calls occur, we now use a Local Moran's I statistic to identify statistically significant spatial hotspots for EMS calls. Next, we use a Local Moran's I statistic to identify statistically significant hot spots for EMS calls in Santa Monica. Using this method, we find areas where the clustering of EMS calls is greater than it would be if they were randomly distributed. In Figure XX, we see that of the fishnet grids with high rates of EMS calls, only some of them have high clustering (Moran's I). Next, we use the p-value of the Moran's I value to identify areas with high clustering that also have a high confidence level in their Moran's I. This leaves us with two distinct hot spots in Santa Monica: one in the downtown area, and one in Midtown.These hotspots make sense: the downtown area has a beach, the Santa Monica pier, and Muscle Beach, three locations with high daytime occupancy and high risk for accidents.     
 
 
 ```{r Maps/plot: Local Morans + add isSig features, message=FALSE, warning=FALSE, results='hide'}
-
 ##Prepare for moran's
 library(spdep)
 final_net.nb <- poly2nb(as_Spatial(final_net), queen=TRUE) 
@@ -1367,59 +1359,47 @@ study.panel <-
 
 
 ```{r animation, message=FALSE, warning=FALSE, results='hide'}
-#week20 <-
-#  filter(EMS_18_20.sf, week == 20)
+week20 <-
+  filter(EMS_2020.sf, week == 20)
 
-#week20.panel <-
-#  expand.grid(
-#    interval4h = unique(week20$interval4h),
-#    reporting_district = unique(EMS_18_20.sf$reporting_district))
+week20.panel <-
+  expand.grid(
+    interval4h = unique(week20$interval4h),
+    reporting_district = unique(EMS_2020.sf$reporting_district))
 
-#ems.animation.data <-
-#  mutate(week20, Trip_Counter = 1) %>%
-#    right_join(week20.panel) %>% 
-#    group_by(interval4h, reporting_district) %>%
-#    summarize(Trip_Count = sum(Trip_Counter, na.rm=T)) %>% 
-#    ungroup() %>% 
-#    st_sf() %>%
-#    mutate(Trips = case_when(Trip_Count == 0 ~ "0 trips",
-#                             Trip_Count == 1 ~ "1 trips",
-#                             Trip_Count == 2 ~ "2 trips",
-#                             Trip_Count == 3 ~ "3 trips",
-#                             Trip_Count == 4 ~ "4 trips")) %>%
-#    mutate(Trips = fct_relevel(Trips, "0 trips","1 trips","2 trips","3 trips", "4 trips"))
+ems.animation.data <-
+  mutate(week20, Trip_Counter = 1) %>%
+    right_join(week20.panel) %>%           #AD: not workingn because missing geometry column - Matt and I diagnosed this together.
+    group_by(interval4h, uniqueID) %>%
+    summarize(Trip_Count = sum(Trip_Counter, na.rm=T)) %>% 
+    ungroup() %>% 
+    st_sf() %>%
+    mutate(Trips = case_when(Trip_Count == 0 ~ "0 trips",
+                             Trip_Count == 1 ~ "1 trips",
+                             Trip_Count == 2 ~ "2 trips",
+                             Trip_Count == 3 ~ "3 trips",
+                             Trip_Count == 4 ~ "4 trips")) %>%
+    mutate(Trips = fct_relevel(Trips, "0 trips","1 trips","2 trips","3 trips", "4 trips"))
 
 
-#library(gganimate)
-#library(gifski)
-#EMS_animation <-
-#  ggplot() +
-#    geom_sf(data = ems.animation.data, aes(col = Trips, size = Trips), show.legend = "point")+
-#    geom_sf(data = ACS, color = "grey", fill = "transparent")+
-#    scale_fill_manual(values = c("green", "yellow", "orange","red")) +
-#    labs(title = "Figure 4.6: EMS calls for one week in May 2020",
-#         subtitle = "4 hour intervals: {current_frame}") +
-#    transition_manual(interval4h) +
-#    mapTheme()
+library(gganimate)
+library(gifski)
+EMS_animation <-
+  ggplot() +
+    geom_sf(data = ems.animation.data, aes(col = Trips, size = Trips), show.legend = "point")+
+    geom_sf(data = ACS, color = "grey", fill = "transparent")+
+    scale_fill_manual(values = c("green", "yellow", "orange","red")) +
+    labs(title = "Figure 4.6: EMS calls for one week in May 2020",
+         subtitle = "4 hour intervals: {current_frame}") +
+    transition_manual(interval4h) +
+    mapTheme()
 
-#animate(EMS_animation, duration=60, fps=50, renderer = gifski_renderer())
+animate(EMS_animation, duration=60, fps=50, renderer = gifski_renderer())
 
-#anim_save("ems_local", EMS_animation, duration=60, renderer = gifski_renderer())
+anim_save("ems_local", EMS_animation, duration=60, renderer = gifski_renderer())
 ```
 
 # Linear Regression Models
-```{r Split data, message=FALSE, warning=FALSE, results='hide'}
-
-#split data sets
-library(caret)
-set.seed(3456)
-trainIndex <- createDataPartition(study.panel.rd$EMS_Count, 
-                                  y = paste(study.panel.rd$reporting_district),
-                                  p = .65,
-                                  list = FALSE,
-                                  times = 1)
-```
-
 ```{r corr plot, message=FALSE, warning=FALSE, results='hide'}
 #Make final panel with spatial features
 study.panel.net <- final_net %>%
@@ -1445,9 +1425,6 @@ ggcorrplot(
 ```
 
 ```{r Regressions}
-#EMSallTrain <- study.panel.net[ trainIndex,]
-#EMSallTest  <- study.panel.net[-trainIndex,] 
-
 EMS.Train <- subset(study.panel.net,
      interval60 >= as.POSIXct('2020-01-01') &
      interval60 < as.POSIXct('2020-08-01')
@@ -1498,65 +1475,81 @@ week_predictions <-
            MAE = map_dbl(Absolute_Error, mean, na.rm = TRUE),
            sd_AE = map_dbl(Absolute_Error, sd, na.rm = TRUE),
            )
-
-week_predictions
 ```
 
 
 # Cross Validation - to be improved
 ```{r cross validation, message=FALSE, warning=FALSE, results='hide'}
-library(caret)
+#library(caret)
 
-EMSsample <- sample_n(study.panel.net, 10000)%>%
-  na.omit()
+#study.panel.net.cv <- final_net  %>%
+#    dplyr::mutate(latitude = sf::st_coordinates(st_centroid(.))[,1],
+#                longitude = sf::st_coordinates(st_centroid(.))[,2]) %>%
+#   left_join(study.panel, ., by= "uniqueID") %>%
+#   na.omit() %>%
+#   mutate(tract = as.factor(tract))
+#   
+#   
+# 
+# EMSsample <- sample_n(study.panel.net.cv, 10000)%>%
+#   na.omit()
+# 
+# fitControl <- trainControl(method = "cv", 
+#                            number = 100,
+#                            savePredictions = TRUE)
+# 
+# set.seed(1000)
+# # for k-folds CV
+# 
+# reg.cv.k <-  
+#   train(countEMS ~ uniqueID +  hour(interval60) + week + dotw + Temperature + Precipitation + Wind_Speed + visibility + wind_gust + lagHour + lag2Hours +lag3Hours + lag4Hours + lag12Hours + lag1day, 
+#         data = EMSsample,  
+#         method = "lm",  
+#         trControl = fitControl,  
+#         na.action = na.pass)
+# 
+# reg.cv.k.health <-
+#    train(countEMS ~  hour(interval60) + week + dotw + Temperature + Precipitation + Wind_Speed + visibility + wind_gust + lagHour + lag2Hours +lag3Hours + lag4Hours + lag12Hours + lag1day + harmfullanduse + markings +   servicerequest + streetlights + Trash + Violent_Crime + uninsured + arthritis + bingeDrink + highBloodPressure +  bloodPressureMeds+ cancer + asthma + heartDisease + doctorCheckups + cholesterolScreen + colonScreen65 +    pulmonaryDisease + clinicalServicesMen65 + clinicalServicesWomen65 + smoking + dentalVisits + diabetes + highCholesterol + kidneyDisease + noPhysicalActivity + mammograms50 + poorMentalHealth + obese + papTest+ poorPhysicalHealth + sleepDeprived + stroke + noTeeth,
+#         data = EMSsample,  
+#         method = "lm",  
+#         trControl = fitControl,  
+#         na.action = na.pass)
+# 
+# reg.cv.k.space <-
+#    train(countEMS ~  hour(interval60) + week + dotw + Temperature + Precipitation + Wind_Speed + visibility + wind_gust + lagHour + lag2Hours +lag3Hours + lag4Hours + lag12Hours + lag1day + harmfullanduse + markings +   servicerequest + streetlights + Trash + Violent_Crime + uninsured + arthritis + bingeDrink + highBloodPressure +  bloodPressureMeds+ cancer + asthma + heartDisease + doctorCheckups + cholesterolScreen + colonScreen65 +    pulmonaryDisease + clinicalServicesMen65 + clinicalServicesWomen65 + smoking + dentalVisits + diabetes + highCholesterol + kidneyDisease + noPhysicalActivity + mammograms50 + poorMentalHealth + obese + papTest+ poorPhysicalHealth + sleepDeprived + stroke + noTeeth + median_age + medianage_male + medianage_female + population + medHHInc + pctVacant + pctWhite + pctRenterOcc + pctNoHS + pctPoverty + youthUnemploy + pctMaleYouth + ZIPCODE + violentCrime.nn + trash.nn + streetlightissue.nn + signandmarking.nn + socialservice.nn + harmfullu.nn + sport.nn + bar.nn + downtown.nn + intersection.nn + EMS.isSig + EMS.isSig.dist,
+#         data = EMSsample,  
+#         method = "lm",  
+#         trControl = fitControl,  
+#         na.action = na.pass)
+# 
+# 
+# reg.cv.k
+# reg.cv.k.health
+# reg.cv.k.space
+# 
+# grid.arrange(  #AD: add geom_vline(xintercept = mean(reg.cv.k$resample$MAE)) to show the average 
+# ggplot(reg.cv.k$resample, aes(x=MAE)) +
+#   geom_histogram(bins = 30, colour="black", fill = "#FDE725FF") +
+#   geom_vline(xintercept = mean(reg.cv.k$resample$MAE))+
+#   labs(title = "Model ks") +
+#   plotTheme(), 
+# ggplot(reg.cv.k.health$resample, aes(x=MAE)) +
+#   geom_histogram(bins = 30, colour="black", fill = "#FDE725FF") +
+#       geom_vline(xintercept = mean(reg.cv.k.health$resample$MAE))+
+#   labs(title = "Model ks + health Features") +
+#   plotTheme(),
+# ggplot(reg.cv.k.space$resample, aes(x=MAE)) +
+#   geom_histogram(bins = 30, colour="black", fill = "#FDE725FF") +
+#       geom_vline(xintercept = mean(reg.cv.k.space$resample$MAE))+
+#   labs(title = "Model ks + health + spatial Features")  +
+#   plotTheme(),
+# ncol = 3,
+# top = "Mean Average Error in Cross Validation Tests with Various Models"
+# )
 
-fitControl <- trainControl(method = "cv", 
-                           number = 100,
-                           savePredictions = TRUE)
+#AD: Matt said to do LOGO-CV instead
 
-set.seed(1000)
-# for k-folds CV
-
-reg.cv.k <-  
-  train(countEMS ~ uniqueID +  hour(interval60) + week + dotw + Temperature + Precipitation + Wind_Speed + visibility + wind_gust + lagHour + lag2Hours +lag3Hours + lag4Hours + lag12Hours + lag1day, 
-        data = EMSsample,  
-        method = "lm",  
-        trControl = fitControl,  
-        na.action = na.pass)
-
-reg.cv.k.health <-
-   train(countEMS ~  hour(interval60) + week + dotw + Temperature + Precipitation + Wind_Speed + visibility + wind_gust + lagHour + lag2Hours +lag3Hours + lag4Hours + lag12Hours + lag1day + harmfullanduse + markings +   servicerequest + streetlights + Trash + Violent_Crime + uninsured + arthritis + bingeDrink + highBloodPressure +  bloodPressureMeds+ cancer + asthma + heartDisease + doctorCheckups + cholesterolScreen + colonScreen65 +    pulmonaryDisease + clinicalServicesMen65 + clinicalServicesWomen65 + smoking + dentalVisits + diabetes + highCholesterol + kidneyDisease + noPhysicalActivity + mammograms50 + poorMentalHealth + obese + papTest+ poorPhysicalHealth + sleepDeprived + stroke + noTeeth,
-        data = EMSsample,  
-        method = "lm",  
-        trControl = fitControl,  
-        na.action = na.pass)
-
-reg.cv.k.space <-
-   train(countEMS ~  hour(interval60) + week + dotw + Temperature + Precipitation + Wind_Speed + visibility + wind_gust + lagHour + lag2Hours +lag3Hours + lag4Hours + lag12Hours + lag1day + harmfullanduse + markings +   servicerequest + streetlights + Trash + Violent_Crime + uninsured + arthritis + bingeDrink + highBloodPressure +  bloodPressureMeds+ cancer + asthma + heartDisease + doctorCheckups + cholesterolScreen + colonScreen65 +    pulmonaryDisease + clinicalServicesMen65 + clinicalServicesWomen65 + smoking + dentalVisits + diabetes + highCholesterol + kidneyDisease + noPhysicalActivity + mammograms50 + poorMentalHealth + obese + papTest+ poorPhysicalHealth + sleepDeprived + stroke + noTeeth + median_age + medianage_male + medianage_female + population + medHHInc + pctVacant + pctWhite + pctRenterOcc + pctNoHS + pctPoverty + youthUnemploy + pctMaleYouth + ZIPCODE + violentCrime.nn + trash.nn + streetlightissue.nn + signandmarking.nn + socialservice.nn + harmfullu.nn + sport.nn + bar.nn + downtown.nn + intersection.nn + EMS.isSig + EMS.isSig.dist,
-        data = EMSsample,  
-        method = "lm",  
-        trControl = fitControl,  
-        na.action = na.pass)
-
-
-reg.cv.k
-reg.cv.k.health
-reg.cv.k.space
-
-ggplot(reg.cv.k$resample, aes(x=MAE)) +
-  geom_histogram(bins = 30, colour="black", fill = "#FDE725FF") +
-  labs(title = "Figure 6.1: Mean Average Error in Cross Validation Tests with model ks") 
-
-ggplot(reg.cv.k.health$resample, aes(x=MAE)) +
-  geom_histogram(bins = 30, colour="black", fill = "#FDE725FF") +
-  labs(title = "Figure 6.2: Mean Average Error in Cross Validation Tests with model ks plus Addtional health Features") 
-
-ggplot(reg.cv.k.space$resample, aes(x=MAE)) +
-  geom_histogram(bins = 30, colour="black", fill = "#FDE725FF") +
-  labs(title = "Figure 6.3: Mean Average Error in Cross Validation Tests with model 4 plus Addtional health and spatial Features") 
-
-
-#hold-one-out
+# LOGO-CV 
 reg.vars <- c("TBD")
 
 reg.ss.vars <- c("TBD")
@@ -1572,7 +1565,7 @@ cvID_list <- unique(dataset[[id]])
   thisFold <- i
   cat("This hold out fold is", thisFold, "\n")
 
-  fold.train <- filter(dataset, dataset[[id]] != thisFold) %>% as.data.frame() %>% 
+  fold.train <- filter(dataset, dataset[[id]] != thisFold) %>% as.data.frame() %>%  #AD: let's use month
                 dplyr::select(id, geometry, indVariables, dependentVariable)
   fold.test  <- filter(dataset, dataset[[id]] == thisFold) %>% as.data.frame() %>% 
                 dplyr::select(id, geometry, indVariables, dependentVariable)
@@ -1687,7 +1680,6 @@ week_predictions %>%
 # Spatial Accuracy
 ```{r spatial validation, message=FALSE, warning=FALSE, results='hide'}
 
-  
 error.byWeek <-
   filter(week_predictions, Regression == "Time_Space_Lag" & Week == 43) %>% 
   unnest() %>% 
@@ -1731,7 +1723,71 @@ ggplot() +
     plotTheme()
 ```
 
+```{r overall accuracy}
+week_predictions %>% 
+  mutate(interval60 = map(data, pull, interval60),
+         uniqueID = map(data, pull, uniqueID), 
+         latitude = map(data, pull, latitude), 
+         longitude = map(data, pull, longitude),
+         dotw = map(data, pull, dotw)) %>%
+  dplyr::select(interval60, uniqueID, longitude, 
+         latitude, Observed, Prediction, Regression,
+         dotw) %>%
+  unnest() %>%
+  filter(Regression == "Time_Space_Lag")%>%
+  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
+         time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
+                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
+                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
+                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush"))%>%
+  ggplot()+
+  geom_point(aes(x= Observed, y = Prediction))+
+  geom_smooth(aes(x= Observed, y= Prediction), method = "lm", se = FALSE, color = "red")+
+  geom_abline(slope = 1, intercept = 0)+
+  facet_grid(time_of_day~weekend)+
+  labs(title="Observed vs Predicted",
+       x="Observed trips", 
+       y="Predicted trips")+
+  plotTheme()
 
+
+#MAE by time
+MAE_plot_map <- week_predictions %>% 
+  mutate(interval60 = map(data, pull, interval60),
+         uniqueID = map(data, pull, uniqueID), 
+         latitude = map(data, pull, latitude), 
+         longitude = map(data, pull, longitude),
+         dotw = map(data, pull, dotw) ) %>%
+  dplyr::select(interval60, uniqueID, longitude, 
+         latitude, Observed, Prediction, Regression,
+         dotw) %>%
+  unnest() %>%
+  filter(Regression == "Time_Space_Lag")%>%
+  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
+         time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
+                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
+                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
+                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush")) %>%
+  group_by(uniqueID, weekend, time_of_day, longitude, latitude) %>%
+  summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  st_as_sf(coords = c("latitude","longitude"), crs = "EPSG:2225") %>% 
+  st_transform( crs=4326) %>% 
+  cbind(., st_coordinates(.))
+
+ggplot(MAE_plot_map)+
+  geom_sf(data = ACS %>%
+            st_transform(crs=4326), colour = '#efefef')+
+  # geom_point(aes(x = longitude, y = latitude, color = MAE), 
+  #            fill = "transparent", size = 0.5, alpha = 1.5)+
+  geom_sf(adata = MAE_plot_map , aes(color = MAE),
+             fill = "transparent", size = 0.5, alpha = 1.5)+
+  scale_colour_viridis(direction = -1,
+                       discrete = FALSE, option = "D") +
+  facet_grid(weekend~time_of_day)+
+  labs(title="Mean Absolute Errors, Test Set")+
+  mapTheme()
+```
 
 
 ```{r more spatial validation}
@@ -1742,7 +1798,6 @@ week_predictions.rd <- week_predictions %>%
   dplyr::select(latitude, longitude, interval60, Observed, Prediction, Regression, Absolute_Error, sd_AE, MAE) %>%
   unnest() %>%
  left_join(., EMS_18_20, by= c("interval60" = "interval60"))
-
 
 
 
@@ -1808,82 +1863,46 @@ week_predictions.rd %>%
              fill = "transparent", alpha = 0.4)+
   scale_colour_viridis(direction = -1,
                        discrete = FALSE, option = "D")+
-  ylim(min(final_net$latitude), max(final_net$latitude))+
-  xlim(min(final_net$longitude), max(final_net$longitude))+
+  ylim(min(EMS_2020.sf$latitude), max(EMS_2020.sf$latitude))+
+  xlim(min(EMS_2020.sf$longitude), max(EMS_2020.sf$longitude))+
   labs(title="Mean Abs Error, Test Set, Model 4")+
   mapTheme()
 
 
 ```
 
-# Distribution of Error
-```{r plot: predicted vs observed, message=FALSE, warning=FALSE, results='hide'}
-
-
-
-
-
+```{r across social groups}
 week_predictions %>% 
-    mutate(interval60 = map(data, pull, interval60),
-           start_station = map(data, pull, start_station), 
-           start_lat = map(data, pull, start_lat), 
-           start_lon = map(data, pull, start_lon),
-           dotw = map(data, pull, dotw)) %>%
-    dplyr::select(interval60, start_station, start_lon, 
-           start_lat, Observed, Prediction, Regression,
-           dotw) %>%
-    unnest() %>%
-  filter(Regression == "DTime_Space_FE_timeLags")%>%
-  mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
-         time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
-                                 hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
-                                 hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
-                                 hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush"))%>%
-  ggplot()+
-  geom_point(aes(x= Observed, y = Prediction))+
-    geom_smooth(aes(x= Observed, y= Prediction), method = "lm", se = FALSE, color = "red")+
-    geom_abline(slope = 1, intercept = 0)+
-  facet_grid(time_of_day~weekend)+
-  labs(title="Figure 5.4: Observed vs Predicted",
-       x="Observed trips", 
-       y="Predicted trips")+
-  plotTheme
-```
-
-```{r map: spatial distribution of MAE, message=FALSE, warning=FALSE, results='hide'}
-week_predictions %>% 
-    mutate(interval60 = map(data, pull, interval60),
-           start_station = map(data, pull, start_station), 
-           start_lat = map(data, pull, start_lat), 
-           start_lon = map(data, pull, start_lon),
-           dotw = map(data, pull, dotw)) %>%
-    dplyr::select(interval60, start_station, start_lon, 
-           start_lat, Observed, Prediction, Regression,
-           dotw) %>%
-    unnest() %>%
-  filter(Regression == "DTime_Space_FE_timeLags")%>%
+  mutate(interval60 = map(data, pull, interval60),
+         uniqueID = map(data, pull, uniqueID), 
+         latitude = map(data, pull, latitude), 
+         longitude = map(data, pull, longitude),
+         dotw = map(data, pull, dotw),
+         pctWhite = map(data, pull, pctWhite),
+         pctPoverty = map(data, pull, pctPoverty),
+         pctHeartDisease = map(data, pull, heartDisease)) %>%
+  select(interval60, uniqueID, longitude, 
+         latitude, Observed, Prediction, Regression,
+         dotw, pctWhite, pctPoverty, pctHeartDisease) %>%
+  unnest() %>%
+  filter(Regression == "Time_Space_Lag")%>%
   mutate(weekend = ifelse(dotw %in% c("Sun", "Sat"), "Weekend", "Weekday"),
          time_of_day = case_when(hour(interval60) < 7 | hour(interval60) > 18 ~ "Overnight",
                                  hour(interval60) >= 7 & hour(interval60) < 10 ~ "AM Rush",
                                  hour(interval60) >= 10 & hour(interval60) < 15 ~ "Mid-Day",
                                  hour(interval60) >= 15 & hour(interval60) <= 18 ~ "PM Rush")) %>%
-  group_by(start_station, weekend, time_of_day, start_lon, start_lat) %>%
+  filter(time_of_day == "AM Rush") %>%
+  group_by(uniqueID, pctWhite, pctPoverty, pctHeartDisease) %>%
   summarize(MAE = mean(abs(Observed-Prediction), na.rm = TRUE))%>%
+  gather(-uniqueID, -MAE, key = "variable", value = "value")%>%
   ggplot(.)+
-  geom_sf(data = PhillyTracts%>%
-    st_transform(st_crs(4326)), color = "grey", fill = "transparent")+
-  geom_point(aes(x = start_lon, y = start_lat, color = MAE), 
-             fill = "transparent", size = 0.5, alpha = 1)+
-  scale_colour_viridis(direction = -1,
-  discrete = FALSE, option = "D")+
-  ylim(min(dat_census$start_lat), max(dat_census$start_lat))+
-  xlim(min(dat_census$start_lon), max(dat_census$start_lon))+
-  facet_grid(weekend~time_of_day)+
-  labs(title="Figure 5.5: Mean Absolute Errors, Test Set")+
-  mapTheme
+  #geom_sf(data = sfCensus, color = "grey", fill = "transparent")+
+  geom_point(aes(x = value, y = MAE), alpha = 0.4)+
+  geom_smooth(aes(x = value, y = MAE), method = "lm", se= FALSE)+
+  facet_wrap(~variable, scales = "free")+
+  labs(title="Errors as a function of socio-economic variables",
+       y="Mean Absolute Error (Trips)")+
+  plotTheme()
 ```
 
 
-# Conclusion
-##g. Talk about how your analysis meets the use case you set out to address.
-##h. What could you do to make the analysis better?
