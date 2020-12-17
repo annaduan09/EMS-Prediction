@@ -1789,6 +1789,7 @@ ggplot(MAE_plot_map)+
   mapTheme()
 ```
 
+# Everything after this doesn't work yet.
 
 ```{r more spatial validation}
 week_predictions.rd <- week_predictions %>%
